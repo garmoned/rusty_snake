@@ -9,10 +9,13 @@ use rocket::serde::json::Json;
 use serde_json::Value;
 use std::env;
 
+mod floodfill;
 mod logic;
-
+mod minimax;
 mod models;
-
+mod simulation;
+mod test_utils;
+mod utils;
 // API and Response Objects
 // See https://docs.battlesnake.com/api
 
@@ -74,7 +77,7 @@ fn rocket() -> _ {
     rocket::build()
         .attach(AdHoc::on_response("Server ID Middleware", |_, res| {
             Box::pin(async move {
-                res.set_raw_header("Server", "battlesnake/github/starter-snake-rust");
+                res.set_raw_header("Server", "Rusty_Snake");
             })
         }))
         .mount(

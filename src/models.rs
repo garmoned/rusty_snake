@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::collections::HashMap;
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -9,31 +9,47 @@ pub struct Game {
     pub timeout: u32,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Board {
-    height: u32,
-    width: u32,
-    food: Vec<Coord>,
-    snakes: Vec<Battlesnake>,
-    hazards: Vec<Coord>,
+    pub height: u32,
+    pub width: u32,
+    pub food: Vec<Coord>,
+    pub snakes: Vec<Battlesnake>,
+    pub hazards: Vec<Coord>,
+    pub winner: Option<String>,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Battlesnake {
-    id: String,
-    name: String,
-    health: u32,
+    pub id: String,
+    pub name: String,
+    pub health: u32,
     pub body: Vec<Coord>,
     pub head: Coord,
-    length: u32,
-    latency: String,
-    shout: Option<String>,
+    pub length: u32,
+    pub latency: String,
+    pub shout: Option<String>,
+    pub eliminated_cause: Option<String>,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone, Hash, Eq, PartialEq)]
 pub struct Coord {
-    pub x: u32,
-    pub y: u32,
+    pub x: i32,
+    pub y: i32,
+}
+
+impl Coord {
+    pub fn default() -> Self {
+        return Self { x: 0, y: 0 };
+    }
+
+    pub fn intersect(&self, coord: &Coord) -> bool {
+        return self.x == coord.x && self.y == self.y;
+    }
+
+    pub fn in_bounds(&self, width: i32, height: i32) -> bool {
+        return self.x < width && self.y < height && self.y >= 0 && self.x >= 0;
+    }
 }
 
 #[derive(Deserialize, Serialize, Debug)]
