@@ -1,9 +1,9 @@
 {
     "game": {
-        "id": "3b2b284a-ae59-4980-aaa9-0553d93a0758",
+        "id": "ba34fd69-2758-4c32-994b-7f2b7a2aa443",
         "ruleset": {
             "name": "standard",
-            "version": "v1.1.13",
+            "version": "cli",
             "settings": {
                 "foodSpawnChance": 15,
                 "minimumFood": 1,
@@ -11,7 +11,7 @@
                 "hazardMap": "",
                 "hazardMapAuthor": "",
                 "royale": {
-                    "shrinkEveryNTurns": 0
+                    "shrinkEveryNTurns": 25
                 },
                 "squad": {
                     "allowBodyCollisions": false,
@@ -22,74 +22,46 @@
             }
         },
         "map": "standard",
-        "timeout": 500,
-        "source": "custom"
+        "timeout": 50000,
+        "source": ""
     },
-    "turn": 1,
+    "turn": 55,
     "board": {
         "height": 11,
         "width": 11,
         "snakes": [
             {
-                "id": "long_snake",
-                "name": "MontyPython",
-                "latency": "65",
-                "health": 99,
+                "id": "f1ff057d-25fd-436f-9fe1-0a260b1b0618",
+                "name": "rust",
+                "latency": "28",
+                "health": 73,
                 "body": [
                     {
-                        "x": 5,
+                        "x": 9,
                         "y": 10
                     },
                     {
-                        "x": 5,
+                        "x": 8,
                         "y": 10
                     },
                     {
-                        "x": 5,
+                        "x": 7,
+                        "y": 10
+                    },
+                    {
+                        "x": 6,
+                        "y": 10
+                    },
+                    {
+                        "x": 6,
                         "y": 9
-                    },
-                    {
-                        "x": 5,
-                        "y": 8
-                    },
-                    {
-                        "x": 5,
-                        "y": 7
-                    },
-                    {
-                        "x": 5,
-                        "y": 6
-                    },
-                    {
-                        "x": 5,
-                        "y": 5
-                    },
-                    {
-                        "x": 5,
-                        "y": 4
-                    },
-                    {
-                        "x": 5,
-                        "y": 3
-                    },
-                    {
-                        "x": 5,
-                        "y": 2
-                    },
-                    {
-                        "x": 5,
-                        "y": 1
-                    },
-                    {
-                        "x": 5,
-                        "y": 0
                     }
                 ],
                 "head": {
-                    "x": 5,
+                    "x": 9,
                     "y": 10
                 },
-                "length": 3,
+                "length": 5,
                 "shout": "",
                 "squad": "",
                 "customizations": {
@@ -99,90 +71,114 @@
                 }
             },
             {
-                "id": "short_snake",
-                "name": "Peluchito",
-                "latency": "500",
-                "health": 99,
+                "id": "db9318e6-7e2e-4c47-92f6-26dcec1c0ee5",
+                "name": "montypython",
+                "latency": "78",
+                "health": 74,
                 "body": [
                     {
-                        "x": 9,
-                        "y": 6
+                        "x": 8,
+                        "y": 7
                     },
                     {
-                        "x": 9,
-                        "y": 5
+                        "x": 7,
+                        "y": 7
                     },
                     {
-                        "x": 9,
-                        "y": 4
+                        "x": 6,
+                        "y": 7
                     },
                     {
-                        "x": 9,
-                        "y": 3
+                        "x": 6,
+                        "y": 8
                     },
                     {
-                        "x": 9,
-                        "y": 3
+                        "x": 7,
+                        "y": 8
                     },
                     {
                         "x": 8,
-                        "y": 3
+                        "y": 8
                     }
                 ],
                 "head": {
-                    "x": 9,
-                    "y": 6
+                    "x": 8,
+                    "y": 7
                 },
-                "length": 3,
+                "length": 6,
                 "shout": "",
                 "squad": "",
                 "customizations": {
-                    "color": "#ccab0e",
-                    "head": "bendr",
-                    "tail": "freckled"
+                    "color": "#12d5db",
+                    "head": "shades",
+                    "tail": "sharp"
                 }
             }
         ],
         "food": [
             {
-                "x": 6,
-                "y": 10
-            },
-            {
-                "x": 10,
+                "x": 0,
                 "y": 6
             },
             {
-                "x": 5,
-                "y": 5
+                "x": 6,
+                "y": 1
+            },
+            {
+                "x": 6,
+                "y": 3
+            },
+            {
+                "x": 8,
+                "y": 1
+            },
+            {
+                "x": 7,
+                "y": 3
+            },
+            {
+                "x": 9,
+                "y": 1
+            },
+            {
+                "x": 0,
+                "y": 8
             }
         ],
         "hazards": []
     },
     "you": {
-        "id": "gs_cfw6qPQGty6hVKV9mDMPFXP6",
-        "name": "MontyPython",
-        "latency": "65",
-        "health": 99,
+        "id": "f1ff057d-25fd-436f-9fe1-0a260b1b0618",
+        "name": "rust",
+        "latency": "28",
+        "health": 73,
         "body": [
             {
-                "x": 5,
+                "x": 9,
                 "y": 10
             },
             {
-                "x": 5,
-                "y": 9
+                "x": 8,
+                "y": 10
             },
             {
-                "x": 5,
+                "x": 7,
+                "y": 10
+            },
+            {
+                "x": 6,
+                "y": 10
+            },
+            {
+                "x": 6,
                 "y": 9
             }
         ],
         "head": {
-            "x": 5,
+            "x": 9,
             "y": 10
         },
-        "length": 3,
+        "length": 5,
         "shout": "",
         "squad": "",
         "customizations": {

@@ -44,7 +44,7 @@ impl Coord {
     }
 
     pub fn intersect(&self, coord: &Coord) -> bool {
-        return self.x == coord.x && self.y == self.y;
+        return self.x == coord.x && self.y == coord.y;
     }
 
     pub fn in_bounds(&self, width: i32, height: i32) -> bool {

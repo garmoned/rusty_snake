@@ -1,0 +1,154 @@
+{
+    "game": {
+        "id": "c50ed794-71a1-4d16-b00f-6a7fb4ec9f04",
+        "ruleset": {
+            "name": "standard",
+            "version": "cli",
+            "settings": {
+                "foodSpawnChance": 15,
+                "minimumFood": 1,
+                "hazardDamagePerTurn": 14,
+                "hazardMap": "",
+                "hazardMapAuthor": "",
+                "royale": {
+                    "shrinkEveryNTurns": 25
+                },
+                "squad": {
+                    "allowBodyCollisions": false,
+                    "sharedElimination": false,
+                    "sharedHealth": false,
+                    "sharedLength": false
+                }
+            }
+        },
+        "map": "standard",
+        "timeout": 50000,
+        "source": ""
+    },
+    "turn": 19,
+    "board": {
+        "height": 11,
+        "width": 11,
+        "snakes": [
+            {
+                "id": "6fb03e04-bf48-49c1-bbc4-ac6d2c0bb326",
+                "name": "rust",
+                "latency": "78",
+                "health": 87,
+                "body": [
+                    {
+                        "x": 10,
+                        "y": 9
+                    },
+                    {
+                        "x": 9,
+                        "y": 9
+                    },
+                    {
+                        "x": 9,
+                        "y": 10
+                    },
+                    {
+                        "x": 8,
+                        "y": 10
+                    }
+                ],
+                "head": {
+                    "x": 10,
+                    "y": 9
+                },
+                "length": 4,
+                "shout": "",
+                "squad": "",
+                "customizations": {
+                    "color": "#888888",
+                    "head": "default",
+                    "tail": "default"
+                }
+            },
+            {
+                "id": "1c272a15-f857-41ac-af11-77174299a2de",
+                "name": "montypython",
+                "latency": "57",
+                "health": 93,
+                "body": [
+                    {
+                        "x": 7,
+                        "y": 8
+                    },
+                    {
+                        "x": 7,
+                        "y": 7
+                    },
+                    {
+                        "x": 6,
+                        "y": 7
+                    },
+                    {
+                        "x": 5,
+                        "y": 7
+                    },
+                    {
+                        "x": 4,
+                        "y": 7
+                    }
+                ],
+                "head": {
+                    "x": 7,
+                    "y": 8
+                },
+                "length": 5,
+                "shout": "",
+                "squad": "",
+                "customizations": {
+                    "color": "#12d5db",
+                    "head": "shades",
+                    "tail": "sharp"
+                }
+            }
+        ],
+        "food": [
+            {
+                "x": 0,
+                "y": 7
+            }
+        ],
+        "hazards": []
+    },
+    "you": {
+        "id": "6fb03e04-bf48-49c1-bbc4-ac6d2c0bb326",
+        "name": "rust",
+        "latency": "78",
+        "health": 87,
+        "body": [
+            {
+                "x": 10,
+                "y": 9
+            },
+            {
+                "x": 9,
+                "y": 9
+            },
+            {
+                "x": 9,
+                "y": 10
+            },
+            {
+                "x": 8,
+                "y": 10
+            }
+        ],
+        "head": {
+            "x": 10,
+            "y": 9
+        },
+        "length": 4,
+        "shout": "",
+        "squad": "",
+        "customizations": {
+            "color": "#888888",
+            "head": "default",
+            "tail": "default"
+        }
+    }
+}

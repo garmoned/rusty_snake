@@ -31,9 +31,10 @@
         "width": 11,
         "snakes": [
             {
-                "id": "long_snake",
+                "id": "gs_cfw6qPQGty6hVKV9mDMPFXP6",
                 "name": "MontyPython",
                 "latency": "65",
+                "eliminated_cause": "eliminated",
                 "health": 99,
                 "body": [
                     {
@@ -99,7 +100,7 @@
                 }
             },
             {
-                "id": "short_snake",
+                "id": "gs_cGHvRfpVm3cx7Y3kqr4dqMfY",
                 "name": "Peluchito",
                 "latency": "500",
                 "health": 99,

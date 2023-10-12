@@ -10,17 +10,15 @@ use std::{
 // TODO: Optimize this to floodfill for each snake
 // so we don't have to floodfill multiple times per scoring
 pub fn floodfill(board: &Board, snake_id: &str) -> usize {
-    let mut barriers = HashSet::<Coord>::new();
+    let mut barriers = HashSet::<&Coord>::new();
     let mut filled_tiles = HashSet::<Coord>::new();
-
     let mut target_snake = board.snakes.get(0).unwrap();
-
     for snake in &board.snakes {
         if snake.id == snake_id {
             target_snake = snake;
         }
         for coord in &snake.body {
-            barriers.insert(coord.clone());
+            barriers.insert(coord);
         }
     }
     let mut q = VecDeque::<Coord>::new();
@@ -28,7 +26,6 @@ pub fn floodfill(board: &Board, snake_id: &str) -> usize {
     q.push_back(start_head.clone());
     while q.len() > 0 {
         let expand_from = q.pop_front().unwrap();
-
         for (x, y) in utils::DIRECTIONS {
             let mut new_explore = Coord::default();
             new_explore.x = expand_from.x + x;
@@ -57,14 +54,10 @@ mod test {
     use crate::test_utils;
 
     #[test]
-    fn my_test() {
+    fn test_flood_fill() {
         let game_state = test_utils::get_board();
-
         test_utils::print_board(&game_state);
-
-        println!("{}", floodfill(&game_state, "gs_cfw6qPQGty6hVKV9mDMPFXP6"));
-        println!("{}", floodfill(&game_state, "gs_cGHvRfpVm3cx7Y3kqr4dqMfY"));
-
-        assert_eq!(1, 0)
+        assert_eq!(floodfill(&game_state, "long_snake"), 105);
+        assert_eq!(floodfill(&game_state, "short_snake"), 50);
     }
 }
