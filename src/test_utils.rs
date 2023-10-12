@@ -1,10 +1,10 @@
-const TEST_REQUEST: &str = "./test_request.json";
-const GAME_OVER: &str = "./end_game.json";
-pub const AVOID_DEATH_GET_FOOD: &str = "./avoid_death_get_food.json";
-pub const AVOID_SELF_TRAP: &str = "./avoid_self_trap.json";
-pub const GET_THE_FOOD: &str = "./get_the_food.json";
-pub const AVOID_KILLING_SELF: &str = "./avoid_killing_self.json";
-pub const AVOID_DEATH_ADVANCED: &str = "./avoid_death_advanced.json";
+const TEST_REQUEST: &str = "./scenarios/test_request.json";
+const GAME_OVER: &str = "./scenarios/end_game.json";
+pub const AVOID_DEATH_GET_FOOD: &str = "./scenarios/avoid_death_get_food.json";
+pub const AVOID_SELF_TRAP: &str = "./scenarios/avoid_self_trap.json";
+pub const GET_THE_FOOD: &str = "./scenarios/get_the_food.json";
+pub const AVOID_KILLING_SELF: &str = "./scenarios/avoid_killing_self.json";
+pub const AVOID_DEATH_ADVANCED: &str = "./scenarios/avoid_death_advanced.json";
 
 use crate::models::{Board, GameState};
 use std::{convert::TryInto, fs, path::PathBuf};
