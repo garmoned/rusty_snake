@@ -1,14 +1,5 @@
-use std::{
-    borrow::BorrowMut,
-    collections::{hash_map, HashMap},
-    convert::TryInto,
-    vec,
-};
-
-use crate::{
-    models::{Battlesnake, Board, Coord},
-    utils::{self},
-};
+use crate::models::{Battlesnake, Board, Coord};
+use std::{collections::HashMap, convert::TryInto, vec};
 
 #[derive(Clone)]
 pub struct Action {
@@ -27,8 +18,12 @@ pub enum EndState {
     TIE,
 }
 
-impl ToString for Board {
-    fn to_string(&self) -> String {
+impl Board {
+    pub fn to_string(&self) -> String {
+        return self.to_string_with_depth(0);
+    }
+
+    pub fn to_string_with_depth(&self, depth: usize) -> String {
         let mut grid = vec![];
         for _ in 0..self.height {
             let mut row = vec![];
@@ -38,6 +33,11 @@ impl ToString for Board {
             grid.push(row)
         }
         let mut string = "".to_string();
+
+        let mut depth_string = "".to_string();
+        for _ in 0..depth {
+            depth_string += "---";
+        }
 
         for snake in &self.snakes {
             for bod in &snake.body {
@@ -64,6 +64,7 @@ impl ToString for Board {
             for ch in row {
                 str_row += ch;
             }
+            string += depth_string.as_ref();
             string += &str_row;
             string += "\n";
         }
@@ -74,13 +75,6 @@ impl ToString for Board {
 // Returns true if game is over
 // Board is modified directly.
 impl Board {
-    pub fn get_valid_actions(&self, snake_id: &str, move_buffer: &mut [bool; 4]) {
-        let _ = self.get_snake(snake_id);
-        for (i, _) in utils::DIRECTIONS.iter().enumerate() {
-            move_buffer[i] = true;
-        }
-    }
-
     pub fn execute_action(&mut self, action: Action, last_snake: bool) -> EndState {
         return self.execute(action.snake_id, action.dir, last_snake);
     }
@@ -114,12 +108,13 @@ impl Board {
         for food in &self.food {
             let mut food_has_been_eaten = false;
             for snake in &mut self.snakes {
-                if let None = snake.eliminated_cause {
-                    if snake.body.len() == 0 {
-                        continue;
-                    }
+                if snake.body.len() == 0 {
+                    continue;
                 }
-                if snake.body.get(0).unwrap().intersect(&food) {
+                if snake.eliminated_cause.is_some() {
+                    continue;
+                }
+                if snake.head.intersect(&food) {
                     snake.feed_snake();
                     food_has_been_eaten = true
                 }
@@ -180,7 +175,7 @@ impl Board {
     fn move_snake(&mut self, snake_id: String, dir: (i32, i32)) {
         for snake in &mut self.snakes {
             if snake.body.len() == 0 {
-                panic!("trying to move snakes with zero length body")
+                panic!("Trying to move snakes with zero length body")
             }
 
             match snake.eliminated_cause {
@@ -211,13 +206,15 @@ impl Board {
 
     pub fn get_endstate(&self) -> EndState {
         let mut snakes_remaining = 0;
-        let mut alive_snake_id = "";
+        let mut alive_snake_id = "".to_string();
         for snake in &self.snakes {
-            if let None = snake.eliminated_cause {
+            if snake.eliminated_cause.is_none() {
                 snakes_remaining += 1;
-                alive_snake_id = &snake.id;
+                alive_snake_id = snake.id.clone();
+                continue;
             }
         }
+
         if snakes_remaining == 1 {
             return EndState::Winner(alive_snake_id.to_string());
         }
@@ -316,12 +313,14 @@ impl Battlesnake {
 mod test {
     use crate::{
         simulation::EndState,
-        test_utils::{self, AVOID_DEATH_GET_FOOD, GET_THE_FOOD},
+        test_utils::scenarios::{
+            game_over_board, get_board, get_scenario, AVOID_DEATH_GET_FOOD, GET_THE_FOOD,
+        },
     };
 
     #[test]
     fn test_game_over() {
-        let game_state = test_utils::game_over_board();
+        let game_state = game_over_board().board;
         assert_eq!(
             game_state.get_endstate(),
             EndState::Winner("gs_cGHvRfpVm3cx7Y3kqr4dqMfY".to_string())
@@ -330,25 +329,20 @@ mod test {
 
     #[test]
     fn basic_move() {
-        let mut board = test_utils::get_board();
-        println!("board before moving short snake up\n{}", board.to_string());
+        let mut board = get_board().board;
         board.move_snake("short_snake".to_owned(), (1, 0));
-        println!("board after moving short snake up\n{}", board.to_string());
-        // assert_ne!(1, 1);
     }
 
     #[test]
     fn dies_to_neck() {
-        let mut board = test_utils::get_board();
-        println!("board before moving short snake up\n{}", board.to_string());
+        let mut board = get_board().board;
         board.execute("long_snake".to_owned(), (-1, 0), false);
-        println!("board after moving short snake up\n{}", board.to_string());
         assert!(board.is_terminal());
     }
 
     #[test]
     fn dies_to_out_of_bounds() {
-        let mut board = test_utils::get_board();
+        let mut board = get_board().board;
         board.execute("long_snake".to_owned(), (1, 0), false);
         let winner = board.get_endstate();
         let _short_name = "short_snake".to_string();
@@ -357,14 +351,14 @@ mod test {
 
     #[test]
     fn survives_move() {
-        let mut board = test_utils::get_board();
+        let mut board = get_board().board;
         board.execute("long_snake".to_owned(), (0, -1), false);
         assert_ne!(board.is_terminal(), true);
     }
 
     #[test]
     fn test_dies_head_to_head() {
-        let mut game = test_utils::get_scenario(AVOID_DEATH_GET_FOOD);
+        let mut game = get_scenario(AVOID_DEATH_GET_FOOD);
         let id1 = game.board.snakes[0].id.clone();
         let id2 = game.board.snakes[1].id.clone();
         game.board.execute(id1, (0, 1), false);
@@ -374,7 +368,7 @@ mod test {
 
     #[test]
     fn board_deep_clones() {
-        let mut board = test_utils::get_board();
+        let mut board = get_board().board;
         let board_2 = board.clone();
         board.execute("long_snake".to_owned(), (-1, 0), false);
         assert!(board.is_terminal());
@@ -383,7 +377,7 @@ mod test {
 
     #[test]
     fn test_get_easy_food() {
-        let mut game = test_utils::get_scenario(GET_THE_FOOD);
+        let mut game = get_scenario(GET_THE_FOOD);
         let id1 = game.board.snakes[0].id.clone();
         let id2 = game.board.snakes[1].id.clone();
         assert_eq!(game.board.snakes.get(0).unwrap().body.len(), 4);

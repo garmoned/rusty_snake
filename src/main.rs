@@ -36,13 +36,7 @@ fn handle_start(start_req: Json<GameState>) -> Status {
 
 #[post("/move", format = "json", data = "<move_req>")]
 fn handle_move(move_req: Json<GameState>) -> Json<Value> {
-    let response = logic::get_move(
-        &move_req.game,
-        &move_req.turn,
-        &move_req.board,
-        &move_req.you,
-    );
-
+    let response = logic::get_move(&move_req.board, &move_req.you);
     Json(response)
 }
 

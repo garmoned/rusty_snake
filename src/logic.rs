@@ -27,17 +27,8 @@ pub fn end(_game: &Game, _turn: &u32, _board: &Board, _you: &Battlesnake) {
     info!("GAME OVER");
 }
 
-pub fn get_move(game: &Game, turn: &u32, board: &Board, you: &Battlesnake) -> Value {
-    let mut corrected_snakes = vec![you.clone()];
-    let mut board = board.clone();
-    for snake in &board.snakes {
-        if snake.id == you.id {
-            continue;
-        }
-        corrected_snakes.push(snake.clone())
-    }
-    board.snakes = corrected_snakes;
-    let tree = Tree::new(board);
-    let tup = tree.get_best_move(&you.id);
+pub fn get_move(board: &Board, you: &Battlesnake) -> Value {
+    let tree = Tree::new(board.clone(), you.clone());
+    let tup = tree.get_best_move();
     return json!({ "move": dir_to_string(tup) });
 }

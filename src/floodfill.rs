@@ -44,20 +44,20 @@ pub fn floodfill(board: &Board, snake_id: &str) -> usize {
         }
     }
 
-    return filled_tiles.len();
+    // Body in the fill to avoid getting punished for getting bigger.
+    return filled_tiles.len() + target_snake.body.len();
 }
 
 #[cfg(test)]
 mod test {
 
-    use super::*;
-    use crate::test_utils;
+    use super::floodfill;
+    use crate::test_utils::scenarios::get_board;
 
     #[test]
     fn test_flood_fill() {
-        let game_state = test_utils::get_board();
-        test_utils::print_board(&game_state);
-        assert_eq!(floodfill(&game_state, "long_snake"), 105);
-        assert_eq!(floodfill(&game_state, "short_snake"), 50);
+        let game_state = get_board().board;
+        assert_eq!(floodfill(&game_state, "long_snake"), 117);
+        assert_eq!(floodfill(&game_state, "short_snake"), 56);
     }
 }
