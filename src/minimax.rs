@@ -28,7 +28,11 @@ impl NodeState {
         let end_state: EndState = board.get_endstate();
         let mut scores = vec![];
         for (_, snake) in board.snakes.iter().enumerate() {
-            scores.push(self.calculate_raw_score_per_snake(&snake.id, &end_state, &board))
+            scores.push(
+                self.calculate_raw_score_per_snake(
+                    &snake.id, &end_state, board,
+                ),
+            )
         }
         // return scores;
         let total_score = scores.iter().fold(0.0, |acc, x| acc + x);
@@ -52,7 +56,7 @@ impl NodeState {
                 return -NodeState::MAX_SCORE;
             }
             EndState::Playing => { /* CONTINUE */ }
-            EndState::TIE => return -NodeState::MAX_SCORE,
+            EndState::Tie => return -NodeState::MAX_SCORE,
         }
         let fill_score = floodfill(board, snake_id);
         let snake = board.get_snake(snake_id);
@@ -61,7 +65,7 @@ impl NodeState {
         let mut final_score = (health_score as f32) * NodeState::LIFE_V;
         final_score += (length_score as f32) * NodeState::LENGTH_V;
         final_score += (fill_score as f32) * NodeState::FILL_V;
-        return final_score;
+        final_score
     }
 }
 
@@ -126,7 +130,8 @@ impl Tree {
         let board_state = &self.root.board_state;
         let current_snake = &self.target_snake_id;
         let alphas = vec![NodeState::MAX_SCORE; board_state.snakes.len()];
-        let (score, best_move) = self.get_score(0, &self.root, alphas, current_snake);
+        let (score, best_move) =
+            self.get_score(0, &self.root, alphas, current_snake);
 
         println!("board state:\n{}", board_state.to_string());
 
@@ -178,7 +183,8 @@ impl Tree {
             // Perform alpha pruning.
             // If we found a move better than what is above us we can stop looking.
             if max_score.len() > 0
-                && max_score[self.snake_map[current_snake]] > alphas[self.snake_map[current_snake]]
+                && max_score[self.snake_map[current_snake]]
+                    > alphas[self.snake_map[current_snake]]
             {
                 unsafe {
                     PRUNED_POSITIONS += 1;
@@ -215,10 +221,11 @@ impl Tree {
                 max_score = new_score;
                 for index in 0..new_alphas.len() {
                     if index == self.snake_map[current_snake] {
-                        new_alphas[index] = max_score[self.snake_map[current_snake]]
-                    } else {
                         new_alphas[index] =
-                            NodeState::MAX_SCORE - max_score[self.snake_map[current_snake]]
+                            max_score[self.snake_map[current_snake]]
+                    } else {
+                        new_alphas[index] = NodeState::MAX_SCORE
+                            - max_score[self.snake_map[current_snake]]
                     }
                 }
             }
@@ -233,7 +240,8 @@ mod test {
     use super::*;
     use crate::test_utils::scenarios::{
         get_board, get_scenario, AVOID_DEATH_ADVANCED, AVOID_DEATH_GET_FOOD,
-        AVOID_HEAD_TO_HEAD_DEATH, AVOID_SELF_TRAP, DO_NOT_CIRCLE_FOOD, GET_THE_FOOD,
+        AVOID_HEAD_TO_HEAD_DEATH, AVOID_SELF_TRAP, DO_NOT_CIRCLE_FOOD,
+        GET_THE_FOOD,
     };
 
     #[test]

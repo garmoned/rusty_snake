@@ -15,7 +15,7 @@ const SNAKE_MAX_HEALTH: u32 = 100;
 pub enum EndState {
     Winner(String),
     Playing,
-    TIE,
+    Tie,
 }
 
 impl Board {
@@ -102,7 +102,7 @@ impl Board {
         match end_state {
             EndState::Winner(_) => return end_state,
             EndState::Playing => { /*continue */ }
-            EndState::TIE => return end_state,
+            EndState::Tie => return end_state,
         }
 
         self.move_snake(snake_id, dir);
@@ -125,13 +125,13 @@ impl Board {
         for food in &self.food {
             let mut food_has_been_eaten = false;
             for snake in &mut self.snakes {
-                if snake.body.len() == 0 {
+                if snake.body.is_empty() {
                     continue;
                 }
                 if snake.eliminated_cause.is_some() {
                     continue;
                 }
-                if snake.head.intersect(&food) {
+                if snake.head.intersect(food) {
                     snake.feed_snake();
                     food_has_been_eaten = true
                 }
@@ -148,7 +148,7 @@ impl Board {
             if snake.is_eliminated() {
                 continue;
             }
-            if snake.body.len() <= 0 {
+            if snake.body.len() == 0 {
                 panic!("Zero length snake")
             }
 
@@ -194,15 +194,12 @@ impl Board {
 
     fn move_snake(&mut self, snake_id: String, dir: (i32, i32)) {
         for snake in &mut self.snakes {
-            if snake.body.len() == 0 {
+            if snake.body.is_empty() {
                 panic!("Trying to move snakes with zero length body")
             }
-
-            match snake.eliminated_cause {
-                Some(_) => panic!("Trying to move an eliminated snake"),
-                None => { /*Continue */ }
+            if snake.eliminated_cause.is_some() {
+                panic!("Trying to move an eliminated snake")
             }
-
             if snake_id == snake.id {
                 let last_index = snake.body.len() - 1;
                 let mut new_head = Coord::default();
@@ -220,7 +217,7 @@ impl Board {
         match self.get_endstate() {
             EndState::Winner(_) => return true,
             EndState::Playing => return false,
-            EndState::TIE => return true,
+            EndState::Tie => return true,
         }
     }
 
@@ -236,11 +233,11 @@ impl Board {
         }
 
         if snakes_remaining == 1 {
-            return EndState::Winner(alive_snake_id.to_string());
+            return EndState::Winner(alive_snake_id);
         }
 
         if snakes_remaining == 0 {
-            return EndState::TIE;
+            return EndState::Tie;
         }
 
         return EndState::Playing;

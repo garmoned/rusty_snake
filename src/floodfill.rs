@@ -28,7 +28,7 @@ pub fn floodfill(board: &Board, snake_id: &str) -> usize {
     let mut q = VecDeque::<Coord>::new();
     let start_head = target_snake.body.get(0).unwrap();
     q.push_back(start_head.clone());
-    while q.len() > 0 {
+    while !q.is_empty() {
         let expand_from = q.pop_front().unwrap();
         for (x, y) in utils::DIRECTIONS {
             let mut new_explore = Coord::default();
@@ -48,7 +48,7 @@ pub fn floodfill(board: &Board, snake_id: &str) -> usize {
     }
 
     // Body in the fill to avoid getting punished for getting bigger.
-    return filled_count + target_snake.body.len();
+    filled_count + target_snake.body.len()
 }
 
 #[cfg(test)]
