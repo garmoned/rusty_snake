@@ -1,8 +1,8 @@
-FROM rust:1.63
+FROM rust:1.67
 
-COPY . /usr/app
-WORKDIR /usr/app
+WORKDIR /usr/src/rusty_snake
+COPY . .
 
 RUN cargo install --path .
 
-CMD ["starter-snake-rust"]
+CMD ["rusty_snake"]
