@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, collections::HashMap};
+use std::{borrow::Borrow, collections::HashMap, thread};
 
 use crate::{
     floodfill::floodfill,
@@ -19,7 +19,7 @@ impl NodeState {
     const MAX_SCORE: f32 = 1000.0;
 
     // Heuristic values
-    const FILL_V: f32 = 4.0;
+    const FILL_V: f32 = 2.0;
     const LIFE_V: f32 = 0.0;
     const LENGTH_V: f32 = 10.0;
 
@@ -30,12 +30,15 @@ impl NodeState {
         for (_, snake) in board.snakes.iter().enumerate() {
             scores.push(
                 self.calculate_raw_score_per_snake(
-                    &snake.id, &end_state, board,
+                    &snake.id, &end_state, &board,
                 ),
             )
         }
         // return scores;
-        let total_score = scores.iter().fold(0.0, |acc, x| acc + x);
+        let mut total_score = scores.iter().fold(0.0, |acc, x| acc + x);
+        if total_score == 0.0 {
+            total_score = NodeState::MAX_SCORE
+        }
         return scores
             .iter()
             .map(|x| (x / total_score) * NodeState::MAX_SCORE)
@@ -65,7 +68,7 @@ impl NodeState {
         let mut final_score = (health_score as f32) * NodeState::LIFE_V;
         final_score += (length_score as f32) * NodeState::LENGTH_V;
         final_score += (fill_score as f32) * NodeState::FILL_V;
-        final_score
+        return final_score;
     }
 }
 
@@ -74,10 +77,12 @@ pub struct Tree {
     snake_vec: Vec<String>,
     root: NodeState,
     target_snake_id: String,
+    max_depth: usize,
 }
 
 impl Tree {
-    pub const MAX_DEPTH: usize = 11;
+    pub const PARALLEL_DEPTH: usize = 8;
+    pub const MAX_DEPTH: usize = 12;
 
     pub fn get_next_snake(&self, current_snake: &str) -> &str {
         let next_index = self.snake_map[current_snake] + 1;
@@ -104,34 +109,36 @@ impl Tree {
     pub fn new(mut starting_board: Board, starting_snake: Battlesnake) -> Self {
         let starting_snake_id = starting_snake.id.clone();
         Tree::fix_snake_order(&mut starting_board, starting_snake);
-
         let mut snake_vec = vec![];
         let mut snake_map = HashMap::new();
-
         for (i, snake) in starting_board.borrow().snakes.iter().enumerate() {
             let copy_snake = &snake.id;
             snake_vec.push(copy_snake.clone());
             snake_map.insert(copy_snake.clone(), i);
         }
-
         let root_node_state = NodeState {
             board_state: starting_board,
         };
-
         return Self {
             snake_map,
             snake_vec,
             root: root_node_state,
             target_snake_id: starting_snake_id,
+            max_depth: Tree::MAX_DEPTH,
         };
     }
 
     pub fn get_best_move(&self) -> (i32, i32) {
         let board_state = &self.root.board_state;
         let current_snake = &self.target_snake_id;
+
         let alphas = vec![NodeState::MAX_SCORE; board_state.snakes.len()];
-        let (score, best_move) =
-            self.get_score(0, &self.root, alphas, current_snake);
+        let (score, best_move) = self.get_score_parallel(
+            0,
+            self.root.clone(),
+            alphas,
+            current_snake.clone(),
+        );
 
         println!("board state:\n{}", board_state.to_string());
 
@@ -147,23 +154,146 @@ impl Tree {
         return best_move;
     }
 
-    fn get_score(
+    fn get_score_parallel(
         &self,
         depth: usize,
-        node_state: &NodeState,
+        node_state: NodeState,
         alphas: Vec<f32>,
-        current_snake: &str,
+        current_snake: String,
     ) -> (Vec<f32>, (i32, i32)) {
         let mut best_dir = (1, 0);
 
-        if depth == Tree::MAX_DEPTH || node_state.board_state.is_terminal() {
+        if depth == self.max_depth || node_state.board_state.is_terminal() {
             return (node_state.generate_score_array(), best_dir);
         }
 
         // If eliminated just skip the turn.
         if node_state
             .board_state
-            .get_snake(current_snake)
+            .get_snake(current_snake.as_str())
+            .eliminated_cause
+            .is_some()
+        {
+            return self.get_score_parallel(
+                depth,
+                node_state,
+                alphas,
+                self.get_next_snake(&current_snake).to_owned(),
+            );
+        }
+        let mut new_alphas = alphas.clone();
+        let board_state = &node_state.board_state;
+        let mut max_score = vec![];
+
+        thread::scope(|s| {
+            let mut handles = vec![];
+            for dir in utils::DIRECTIONS {
+                // Perform alpha pruning.
+                // If we found a move better than what is above us we can stop looking.
+                if max_score.len() > 0
+                    && max_score[self.snake_map[&current_snake]]
+                        > alphas[self.snake_map[&current_snake]]
+                {
+                    unsafe {
+                        PRUNED_POSITIONS += 1;
+                    }
+                    break;
+                }
+
+                unsafe {
+                    EXPLORED_POSITIONS += 1;
+                }
+
+                let mut board_copy = board_state.clone();
+                let action = Action {
+                    snake_id: current_snake.to_owned(),
+                    dir,
+                };
+                board_copy
+                    .execute_action(action, self.is_last_nake(&current_snake));
+
+                let new_node = NodeState {
+                    board_state: board_copy,
+                };
+
+                let passed_alphas = new_alphas.clone();
+                let next_snake =
+                    self.get_next_snake(&current_snake).to_string();
+                let handle = s.spawn(|| {
+                    if depth >= Tree::PARALLEL_DEPTH {
+                        return self.get_score_parallel(
+                            depth + 1,
+                            new_node,
+                            passed_alphas,
+                            next_snake,
+                        );
+                    }
+
+                    return self.get_score(
+                        depth + 1,
+                        new_node,
+                        passed_alphas,
+                        next_snake,
+                    );
+                });
+
+                handles.push((dir, handle));
+            }
+            loop {
+                let num_left =
+                    handles.iter().filter(|th| !th.1.is_finished()).count();
+                if num_left == 0 {
+                    break;
+                }
+            }
+
+            for handle in handles {
+                let dir = handle.0;
+                match handle.1.join() {
+                    Ok((new_score, _)) => {
+                        if max_score.len() == 0
+                            || new_score[self.snake_map[&current_snake]]
+                                > max_score[self.snake_map[&current_snake]]
+                        {
+                            best_dir = dir;
+                            max_score = new_score;
+                            for index in 0..new_alphas.len() {
+                                if index == self.snake_map[&current_snake] {
+                                    new_alphas[index] = max_score
+                                        [self.snake_map[&current_snake]]
+                                } else {
+                                    new_alphas[index] = NodeState::MAX_SCORE
+                                        - max_score
+                                            [self.snake_map[&current_snake]]
+                                }
+                            }
+                        }
+                    }
+                    Err(_) => panic!("panicked on thread"),
+                }
+            }
+        });
+
+        return (max_score, best_dir);
+    }
+
+    fn get_score(
+        &self,
+        depth: usize,
+        node_state: NodeState,
+        alphas: Vec<f32>,
+        current_snake: String,
+    ) -> (Vec<f32>, (i32, i32)) {
+        let mut best_dir = (1, 0);
+
+        if depth == self.max_depth || node_state.board_state.is_terminal() {
+            return (node_state.generate_score_array(), best_dir);
+        }
+
+        // If eliminated just skip the turn.
+        if node_state
+            .board_state
+            .get_snake(&current_snake)
             .eliminated_cause
             .is_some()
         {
@@ -171,7 +301,7 @@ impl Tree {
                 depth,
                 node_state,
                 alphas,
-                self.get_next_snake(current_snake),
+                self.get_next_snake(&current_snake).to_owned(),
             );
         }
 
@@ -183,8 +313,8 @@ impl Tree {
             // Perform alpha pruning.
             // If we found a move better than what is above us we can stop looking.
             if max_score.len() > 0
-                && max_score[self.snake_map[current_snake]]
-                    > alphas[self.snake_map[current_snake]]
+                && max_score[self.snake_map[&current_snake]]
+                    > alphas[self.snake_map[&current_snake]]
             {
                 unsafe {
                     PRUNED_POSITIONS += 1;
@@ -201,31 +331,32 @@ impl Tree {
                 snake_id: current_snake.to_owned(),
                 dir,
             };
-            board_copy.execute_action(action, self.is_last_nake(current_snake));
+            board_copy
+                .execute_action(action, self.is_last_nake(&current_snake));
 
             let new_node = NodeState {
                 board_state: board_copy,
             };
             let (new_score, _) = self.get_score(
                 depth + 1,
-                &new_node,
+                new_node,
                 new_alphas.clone(),
-                &self.get_next_snake(current_snake),
+                self.get_next_snake(&current_snake).to_owned(),
             );
 
             if max_score.len() == 0
-                || new_score[self.snake_map[current_snake]]
-                    > max_score[self.snake_map[current_snake]]
+                || new_score[self.snake_map[&current_snake]]
+                    > max_score[self.snake_map[&current_snake]]
             {
                 best_dir = dir;
                 max_score = new_score;
                 for index in 0..new_alphas.len() {
-                    if index == self.snake_map[current_snake] {
+                    if index == self.snake_map[&current_snake] {
                         new_alphas[index] =
-                            max_score[self.snake_map[current_snake]]
+                            max_score[self.snake_map[&current_snake]]
                     } else {
                         new_alphas[index] = NodeState::MAX_SCORE
-                            - max_score[self.snake_map[current_snake]]
+                            - max_score[self.snake_map[&current_snake]]
                     }
                 }
             }
