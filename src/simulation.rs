@@ -23,6 +23,14 @@ impl Board {
         return self.to_string_with_depth(0);
     }
 
+    pub fn width(&self) -> i32 {
+        self.width.try_into().unwrap()
+    }
+
+    pub fn height(&self) -> i32 {
+        self.height.try_into().unwrap()
+    }
+
     pub fn to_string_with_depth(&self, depth: usize) -> String {
         let mut grid = vec![];
         for _ in 0..self.height {
@@ -75,11 +83,20 @@ impl Board {
 // Returns true if game is over
 // Board is modified directly.
 impl Board {
-    pub fn execute_action(&mut self, action: Action, last_snake: bool) -> EndState {
+    pub fn execute_action(
+        &mut self,
+        action: Action,
+        last_snake: bool,
+    ) -> EndState {
         return self.execute(action.snake_id, action.dir, last_snake);
     }
 
-    pub fn execute(&mut self, snake_id: String, dir: (i32, i32), last_snake: bool) -> EndState {
+    pub fn execute(
+        &mut self,
+        snake_id: String,
+        dir: (i32, i32),
+        last_snake: bool,
+    ) -> EndState {
         let end_state = self.get_endstate();
 
         match end_state {
@@ -156,7 +173,10 @@ impl Board {
     fn eliminate_via_collisions(&mut self) {
         let mut is_eliminated = HashMap::<String, bool>::new();
         for snake in &self.snakes {
-            is_eliminated.insert(snake.id.to_string(), snake.collides_with(&self.snakes));
+            is_eliminated.insert(
+                snake.id.to_string(),
+                snake.collides_with(&self.snakes),
+            );
         }
 
         for snake in &mut self.snakes {
@@ -251,7 +271,8 @@ impl Battlesnake {
     }
 
     fn self_collision(&self) -> bool {
-        let head_collide = Battlesnake::head_collide_body(&self.head, &self.body);
+        let head_collide =
+            Battlesnake::head_collide_body(&self.head, &self.body);
         return head_collide;
     }
 
@@ -280,7 +301,8 @@ impl Battlesnake {
     }
 
     fn dies_head_to_head(&self, other_snake: &Battlesnake) -> bool {
-        return self.head.intersect(&other_snake.head) && other_snake.body.len() > self.body.len();
+        return self.head.intersect(&other_snake.head)
+            && other_snake.body.len() > self.body.len();
     }
 
     fn head_collide_body(head: &Coord, body: &Vec<Coord>) -> bool {
@@ -314,7 +336,8 @@ mod test {
     use crate::{
         simulation::EndState,
         test_utils::scenarios::{
-            game_over_board, get_board, get_scenario, AVOID_DEATH_GET_FOOD, GET_THE_FOOD,
+            game_over_board, get_board, get_scenario, AVOID_DEATH_GET_FOOD,
+            GET_THE_FOOD,
         },
     };
 

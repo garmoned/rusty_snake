@@ -1,0 +1,246 @@
+{
+    "game": {
+        "id": "ab8fb102-166e-4900-8230-e161dc1ea791",
+        "ruleset": {
+            "name": "standard",
+            "version": "cli",
+            "settings": {
+                "foodSpawnChance": 15,
+                "minimumFood": 1,
+                "hazardDamagePerTurn": 14,
+                "hazardMap": "",
+                "hazardMapAuthor": "",
+                "royale": {
+                    "shrinkEveryNTurns": 25
+                },
+                "squad": {
+                    "allowBodyCollisions": false,
+                    "sharedElimination": false,
+                    "sharedHealth": false,
+                    "sharedLength": false
+                }
+            }
+        },
+        "map": "standard",
+        "timeout": 50000,
+        "source": ""
+    },
+    "turn": 127,
+    "board": {
+        "height": 11,
+        "width": 11,
+        "snakes": [
+            {
+                "id": "c05d25f9-5669-43a9-bf75-1ba607b44e42",
+                "name": "rust",
+                "latency": "57",
+                "health": 97,
+                "body": [
+                    {
+                        "x": 1,
+                        "y": 10
+                    },
+                    {
+                        "x": 0,
+                        "y": 10
+                    },
+                    {
+                        "x": 0,
+                        "y": 9
+                    },
+                    {
+                        "x": 1,
+                        "y": 9
+                    },
+                    {
+                        "x": 1,
+                        "y": 8
+                    },
+                    {
+                        "x": 0,
+                        "y": 8
+                    },
+                    {
+                        "x": 0,
+                        "y": 7
+                    },
+                    {
+                        "x": 1,
+                        "y": 7
+                    },
+                    {
+                        "x": 2,
+                        "y": 7
+                    },
+                    {
+                        "x": 2,
+                        "y": 8
+                    },
+                    {
+                        "x": 3,
+                        "y": 8
+                    }
+                ],
+                "head": {
+                    "x": 1,
+                    "y": 10
+                },
+                "length": 11,
+                "shout": "",
+                "squad": "",
+                "customizations": {
+                    "color": "#888888",
+                    "head": "default",
+                    "tail": "default"
+                }
+            },
+            {
+                "id": "405050ca-bb4f-45b6-8913-10fd793add10",
+                "name": "montypython",
+                "latency": "73",
+                "health": 80,
+                "body": [
+                    {
+                        "x": 5,
+                        "y": 6
+                    },
+                    {
+                        "x": 5,
+                        "y": 5
+                    },
+                    {
+                        "x": 4,
+                        "y": 5
+                    },
+                    {
+                        "x": 4,
+                        "y": 4
+                    },
+                    {
+                        "x": 4,
+                        "y": 3
+                    },
+                    {
+                        "x": 3,
+                        "y": 3
+                    },
+                    {
+                        "x": 3,
+                        "y": 4
+                    },
+                    {
+                        "x": 2,
+                        "y": 4
+                    },
+                    {
+                        "x": 2,
+                        "y": 5
+                    },
+                    {
+                        "x": 3,
+                        "y": 5
+                    },
+                    {
+                        "x": 3,
+                        "y": 6
+                    },
+                    {
+                        "x": 4,
+                        "y": 6
+                    }
+                ],
+                "head": {
+                    "x": 5,
+                    "y": 6
+                },
+                "length": 12,
+                "shout": "",
+                "squad": "",
+                "customizations": {
+                    "color": "#12d5db",
+                    "head": "shades",
+                    "tail": "sharp"
+                }
+            }
+        ],
+        "food": [
+            {
+                "x": 5,
+                "y": 0
+            },
+            {
+                "x": 2,
+                "y": 6
+            },
+            {
+                "x": 10,
+                "y": 1
+            }
+        ],
+        "hazards": []
+    },
+    "you": {
+        "id": "c05d25f9-5669-43a9-bf75-1ba607b44e42",
+        "name": "rust",
+        "latency": "57",
+        "health": 97,
+        "body": [
+            {
+                "x": 1,
+                "y": 10
+            },
+            {
+                "x": 0,
+                "y": 10
+            },
+            {
+                "x": 0,
+                "y": 9
+            },
+            {
+                "x": 1,
+                "y": 9
+            },
+            {
+                "x": 1,
+                "y": 8
+            },
+            {
+                "x": 0,
+                "y": 8
+            },
+            {
+                "x": 0,
+                "y": 7
+            },
+            {
+                "x": 1,
+                "y": 7
+            },
+            {
+                "x": 2,
+                "y": 7
+            },
+            {
+                "x": 2,
+                "y": 8
+            },
+            {
+                "x": 3,
+                "y": 8
+            }
+        ],
+        "head": {
+            "x": 1,
+            "y": 10
+        },
+        "length": 11,
+        "shout": "",
+        "squad": "",
+        "customizations": {
+            "color": "#888888",
+            "head": "default",
+            "tail": "default"
+        }
+    }
+}

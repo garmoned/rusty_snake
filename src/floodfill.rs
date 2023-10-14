@@ -2,23 +2,27 @@ use crate::{
     models::{Board, Coord},
     utils,
 };
-use std::{
-    collections::{HashSet, VecDeque},
-    convert::TryInto,
-};
+use std::{collections::VecDeque, convert::TryInto};
 
 // TODO: Optimize this to floodfill for each snake
 // so we don't have to floodfill multiple times per scoring
 pub fn floodfill(board: &Board, snake_id: &str) -> usize {
-    let mut barriers = HashSet::<&Coord>::new();
-    let mut filled_tiles = HashSet::<Coord>::new();
+    let mut filled_count = 0;
+    let mut barriers = vec![
+        vec![false; board.width.try_into().unwrap()];
+        board.height.try_into().unwrap()
+    ];
+    let mut filled_tiles = vec![
+        vec![false; board.width.try_into().unwrap()];
+        board.height.try_into().unwrap()
+    ];
     let mut target_snake = board.snakes.get(0).unwrap();
     for snake in &board.snakes {
         if snake.id == snake_id {
             target_snake = snake;
         }
         for coord in &snake.body {
-            barriers.insert(coord);
+            barriers[coord.x()][coord.y()] = true
         }
     }
     let mut q = VecDeque::<Coord>::new();
@@ -32,20 +36,19 @@ pub fn floodfill(board: &Board, snake_id: &str) -> usize {
             new_explore.y = expand_from.y + y;
             // If the space is empty, in bounds, and unexplored mark it as accessible
             // and push it to be explored further from
-            if new_explore.in_bounds(
-                board.width.try_into().unwrap(),
-                board.height.try_into().unwrap(),
-            ) && !barriers.contains(&new_explore)
-                && !filled_tiles.contains(&new_explore)
+            if new_explore.in_bounds(board.width(), board.height())
+                && !barriers[new_explore.x()][new_explore.y()]
+                && !filled_tiles[new_explore.x()][new_explore.y()]
             {
                 q.push_back(new_explore.clone());
-                filled_tiles.insert(new_explore);
+                filled_tiles[new_explore.x()][new_explore.y()] = true;
+                filled_count += 1;
             }
         }
     }
 
     // Body in the fill to avoid getting punished for getting bigger.
-    return filled_tiles.len() + target_snake.body.len();
+    return filled_count + target_snake.body.len();
 }
 
 #[cfg(test)]
