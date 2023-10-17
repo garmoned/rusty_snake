@@ -1,6 +1,7 @@
 use std::{borrow::Borrow, collections::HashMap, thread};
 
 use crate::{
+    config::MiniMaxConfig,
     floodfill::floodfill,
     models::{Battlesnake, Board},
     simulation::{Action, EndState},
@@ -12,14 +13,11 @@ struct NodeState {
     board_state: Board,
 }
 
-static mut EXPLORED_POSITIONS: i64 = 0;
-static mut PRUNED_POSITIONS: i64 = 0;
-
 impl NodeState {
     const MAX_SCORE: f32 = 1000.0;
 
     // Heuristic values
-    const FILL_V: f32 = 2.0;
+    const FILL_V: f32 = 4.5;
     const LIFE_V: f32 = 0.0;
     const LENGTH_V: f32 = 10.0;
 
@@ -34,7 +32,6 @@ impl NodeState {
                 ),
             )
         }
-        // return scores;
         let mut total_score = scores.iter().fold(0.0, |acc, x| acc + x);
         if total_score == 0.0 {
             total_score = NodeState::MAX_SCORE
@@ -81,8 +78,7 @@ pub struct Tree {
 }
 
 impl Tree {
-    pub const PARALLEL_DEPTH: usize = 8;
-    pub const MAX_DEPTH: usize = 12;
+    pub const PARALLEL_DEPTH: usize = 6;
 
     pub fn get_next_snake(&self, current_snake: &str) -> &str {
         let next_index = self.snake_map[current_snake] + 1;
@@ -94,21 +90,13 @@ impl Tree {
         return cur_index + 1 == self.snake_vec.len();
     }
 
-    fn fix_snake_order(board: &mut Board, starting_snake: Battlesnake) {
+    pub fn new(
+        config: MiniMaxConfig,
+        mut starting_board: Board,
+        starting_snake: Battlesnake,
+    ) -> Self {
         let starting_snake_id = starting_snake.id.clone();
-        let mut new_snakes = vec![starting_snake];
-        for snake in &board.snakes {
-            if snake.id == starting_snake_id {
-                continue;
-            }
-            new_snakes.push(snake.clone())
-        }
-        board.snakes = new_snakes
-    }
-
-    pub fn new(mut starting_board: Board, starting_snake: Battlesnake) -> Self {
-        let starting_snake_id = starting_snake.id.clone();
-        Tree::fix_snake_order(&mut starting_board, starting_snake);
+        utils::fix_snake_order(&mut starting_board, starting_snake);
         let mut snake_vec = vec![];
         let mut snake_map = HashMap::new();
         for (i, snake) in starting_board.borrow().snakes.iter().enumerate() {
@@ -124,7 +112,7 @@ impl Tree {
             snake_vec,
             root: root_node_state,
             target_snake_id: starting_snake_id,
-            max_depth: Tree::MAX_DEPTH,
+            max_depth: config.depth,
         };
     }
 
@@ -141,16 +129,12 @@ impl Tree {
         );
 
         println!("board state:\n{}", board_state.to_string());
+        println!(
+            "found best move {} with score {:?}",
+            dir_to_string(best_move),
+            score
+        );
 
-        unsafe {
-            println!(
-                "found best move {} with score {:?} after exploring {} moves\npruned {} positions",
-                dir_to_string(best_move),
-                score,
-                EXPLORED_POSITIONS,
-                PRUNED_POSITIONS
-            );
-        }
         return best_move;
     }
 
@@ -187,21 +171,14 @@ impl Tree {
 
         thread::scope(|s| {
             let mut handles = vec![];
-            for dir in utils::DIRECTIONS {
+            for dir in board_state.get_valid_moves(&current_snake) {
                 // Perform alpha pruning.
                 // If we found a move better than what is above us we can stop looking.
                 if max_score.len() > 0
                     && max_score[self.snake_map[&current_snake]]
                         > alphas[self.snake_map[&current_snake]]
                 {
-                    unsafe {
-                        PRUNED_POSITIONS += 1;
-                    }
                     break;
-                }
-
-                unsafe {
-                    EXPLORED_POSITIONS += 1;
                 }
 
                 let mut board_copy = board_state.clone();
@@ -309,21 +286,14 @@ impl Tree {
         let board_state = &node_state.board_state;
         let mut max_score = vec![];
 
-        for dir in utils::DIRECTIONS {
+        for dir in board_state.get_valid_moves(&current_snake) {
             // Perform alpha pruning.
             // If we found a move better than what is above us we can stop looking.
             if max_score.len() > 0
                 && max_score[self.snake_map[&current_snake]]
                     > alphas[self.snake_map[&current_snake]]
             {
-                unsafe {
-                    PRUNED_POSITIONS += 1;
-                }
                 break;
-            }
-
-            unsafe {
-                EXPLORED_POSITIONS += 1;
             }
 
             let mut board_copy = board_state.clone();
@@ -378,7 +348,11 @@ mod test {
     #[test]
     fn test_avoid_wall() {
         let game_state = get_board();
-        let tree = Tree::new(game_state.board, game_state.you);
+        let tree = Tree::new(
+            MiniMaxConfig::default(),
+            game_state.board,
+            game_state.you,
+        );
         let best_move = dir_to_string(tree.get_best_move());
         assert_ne!("up", best_move)
     }
@@ -386,7 +360,11 @@ mod test {
     #[test]
     fn test_avoid_death_get_food() {
         let game_state = get_scenario(AVOID_DEATH_GET_FOOD);
-        let tree = Tree::new(game_state.board, game_state.you);
+        let tree = Tree::new(
+            MiniMaxConfig::default(),
+            game_state.board,
+            game_state.you,
+        );
         let best_move = dir_to_string(tree.get_best_move());
         assert_ne!(best_move, "right")
     }
@@ -394,14 +372,22 @@ mod test {
     #[test]
     fn test_avoid_self_trap() {
         let game_state = get_scenario(AVOID_SELF_TRAP);
-        let tree = Tree::new(game_state.board, game_state.you);
+        let tree = Tree::new(
+            MiniMaxConfig::default(),
+            game_state.board,
+            game_state.you,
+        );
         let best_move = dir_to_string(tree.get_best_move());
         assert_ne!(best_move, "up")
     }
     #[test]
     fn test_get_easy_food() {
         let game_state = get_scenario(GET_THE_FOOD);
-        let tree = Tree::new(game_state.board, game_state.you);
+        let tree = Tree::new(
+            MiniMaxConfig::default(),
+            game_state.board,
+            game_state.you,
+        );
         let best_move = dir_to_string(tree.get_best_move());
         assert_eq!(best_move, "down")
     }
@@ -409,7 +395,11 @@ mod test {
     #[test]
     fn test_avoid_death_advanced() {
         let game_state = get_scenario(AVOID_DEATH_ADVANCED);
-        let tree = Tree::new(game_state.board, game_state.you);
+        let tree = Tree::new(
+            MiniMaxConfig::default(),
+            game_state.board,
+            game_state.you,
+        );
         let best_move = dir_to_string(tree.get_best_move());
         assert_ne!(best_move, "right")
     }
@@ -417,7 +407,11 @@ mod test {
     #[test]
     fn test_do_not_circle_food() {
         let game_state = get_scenario(DO_NOT_CIRCLE_FOOD);
-        let tree = Tree::new(game_state.board.clone(), game_state.you);
+        let tree = Tree::new(
+            MiniMaxConfig::default(),
+            game_state.board,
+            game_state.you,
+        );
         let best_move = dir_to_string(tree.get_best_move());
         assert_eq!(best_move, "up")
     }
@@ -425,7 +419,11 @@ mod test {
     #[test]
     fn test_avoid_head_to_head_death() {
         let game_state = get_scenario(AVOID_HEAD_TO_HEAD_DEATH);
-        let tree = Tree::new(game_state.board, game_state.you);
+        let tree = Tree::new(
+            MiniMaxConfig::default(),
+            game_state.board,
+            game_state.you,
+        );
         let best_move = dir_to_string(tree.get_best_move());
         assert_ne!(best_move, "left")
     }

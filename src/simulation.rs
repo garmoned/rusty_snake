@@ -1,4 +1,9 @@
-use crate::models::{Battlesnake, Board, Coord};
+use rand::seq::SliceRandom;
+
+use crate::{
+    models::{Battlesnake, Board, Coord},
+    utils,
+};
 use std::{collections::HashMap, convert::TryInto, vec};
 
 #[derive(Clone)]
@@ -18,7 +23,57 @@ pub enum EndState {
     Tie,
 }
 
+impl EndState {
+    pub fn is_terminal(&self) -> bool {
+        match &self {
+            EndState::Winner(_) => return true,
+            EndState::Playing => return false,
+            EndState::Tie => return true,
+        }
+    }
+}
+
 impl Board {
+    pub fn execute_random_move(&mut self, snake_id: &str) {
+        let valid_moves = self.get_valid_moves(snake_id);
+        let dir = valid_moves.choose(&mut rand::thread_rng()).unwrap();
+        self.execute_dir(snake_id, dir.clone());
+    }
+
+    pub fn get_valid_moves(&self, snake_id: &str) -> Vec<(i32, i32)> {
+        let mut dirs = vec![];
+        let snake = self.get_snake(snake_id);
+        let head = &snake.head;
+        for dir in utils::DIRECTIONS {
+            let mut coord = Coord::default();
+            coord.x = head.x + dir.1;
+            coord.y = head.y + dir.0;
+            if !coord.in_bounds(self.width(), self.height()) {
+                continue;
+            }
+            if self.intersect_any_snake_body(&coord) {
+                continue;
+            }
+            dirs.push(dir)
+        }
+        if dirs.is_empty() {
+            dirs.push((1, 0))
+        }
+        return dirs;
+    }
+
+    pub fn intersect_any_snake_body(&self, coord: &Coord) -> bool {
+        for other_snake in &self.snakes {
+            // Skips the head
+            for bod in other_snake.body.iter().skip(1) {
+                if bod.intersect(coord) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     pub fn to_string(&self) -> String {
         return self.to_string_with_depth(0);
     }
@@ -88,12 +143,20 @@ impl Board {
         action: Action,
         last_snake: bool,
     ) -> EndState {
-        return self.execute(action.snake_id, action.dir, last_snake);
+        return self.execute(&action.snake_id, action.dir, last_snake);
+    }
+
+    pub fn execute_dir(&mut self, snake_id: &str, dir: (i32, i32)) -> EndState {
+        return self.execute(snake_id, dir, self.is_last_snake(&snake_id));
+    }
+
+    pub fn is_last_snake(&self, snake_id: &str) -> bool {
+        return self.snakes.get(self.snakes.len() - 1).unwrap().id == snake_id;
     }
 
     pub fn execute(
         &mut self,
-        snake_id: String,
+        snake_id: &str,
         dir: (i32, i32),
         last_snake: bool,
     ) -> EndState {
@@ -192,7 +255,7 @@ impl Board {
         }
     }
 
-    fn move_snake(&mut self, snake_id: String, dir: (i32, i32)) {
+    fn move_snake(&mut self, snake_id: &str, dir: (i32, i32)) {
         for snake in &mut self.snakes {
             if snake.body.is_empty() {
                 panic!("Trying to move snakes with zero length body")
@@ -350,20 +413,20 @@ mod test {
     #[test]
     fn basic_move() {
         let mut board = get_board().board;
-        board.move_snake("short_snake".to_owned(), (1, 0));
+        board.move_snake("short_snake", (1, 0));
     }
 
     #[test]
     fn dies_to_neck() {
         let mut board = get_board().board;
-        board.execute("long_snake".to_owned(), (-1, 0), false);
+        board.execute("long_snake", (-1, 0), false);
         assert!(board.is_terminal());
     }
 
     #[test]
     fn dies_to_out_of_bounds() {
         let mut board = get_board().board;
-        board.execute("long_snake".to_owned(), (1, 0), false);
+        board.execute("long_snake", (1, 0), false);
         let winner = board.get_endstate();
         let _short_name = "short_snake".to_string();
         matches!(winner, EndState::Winner(_short_name));
@@ -372,7 +435,7 @@ mod test {
     #[test]
     fn survives_move() {
         let mut board = get_board().board;
-        board.execute("long_snake".to_owned(), (0, -1), false);
+        board.execute("long_snake", (0, -1), false);
         assert_ne!(board.is_terminal(), true);
     }
 
@@ -381,8 +444,8 @@ mod test {
         let mut game = get_scenario(AVOID_DEATH_GET_FOOD);
         let id1 = game.board.snakes[0].id.clone();
         let id2 = game.board.snakes[1].id.clone();
-        game.board.execute(id1, (0, 1), false);
-        game.board.execute(id2, (0, -1), true);
+        game.board.execute(&id1, (0, 1), false);
+        game.board.execute(&id2, (0, -1), true);
         assert!(game.board.is_terminal());
     }
 
@@ -390,7 +453,7 @@ mod test {
     fn board_deep_clones() {
         let mut board = get_board().board;
         let board_2 = board.clone();
-        board.execute("long_snake".to_owned(), (-1, 0), false);
+        board.execute("long_snake", (-1, 0), false);
         assert!(board.is_terminal());
         assert_ne!(board_2.is_terminal(), true);
     }
@@ -401,8 +464,8 @@ mod test {
         let id1 = game.board.snakes[0].id.clone();
         let id2 = game.board.snakes[1].id.clone();
         assert_eq!(game.board.snakes.get(0).unwrap().body.len(), 4);
-        game.board.execute(id1, (-1, 0), false);
-        game.board.execute(id2, (0, -1), true);
+        game.board.execute(&id1, (-1, 0), false);
+        game.board.execute(&id2, (0, -1), true);
         assert_eq!(game.board.snakes.get(0).unwrap().body.len(), 5);
     }
 }

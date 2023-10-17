@@ -9,10 +9,12 @@ use rocket::serde::json::Json;
 use serde_json::Value;
 use std::env;
 
+mod config;
 mod floodfill;
 mod logic;
 mod minimax;
 mod models;
+mod montecarlo;
 mod simulation;
 mod test_utils;
 mod utils;
@@ -49,6 +51,7 @@ fn handle_end(end_req: Json<GameState>) -> Status {
 
 #[launch]
 fn rocket() -> _ {
+    dotenv::dotenv().ok();
     if let Ok(port) = env::var("PORT") {
         env::set_var("ROCKET_PORT", &port);
     }
