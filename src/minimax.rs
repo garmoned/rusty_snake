@@ -79,7 +79,6 @@ pub struct Tree {
 
 impl Tree {
     pub const PARALLEL_DEPTH: usize = 6;
-
     pub fn get_next_snake(&self, current_snake: &str) -> &str {
         let next_index = self.snake_map[current_snake] + 1;
         return &self.snake_vec[next_index % self.snake_vec.len()];

@@ -13,6 +13,7 @@ impl MonteCarloConfig {
         }
     }
 
+    #[cfg(test)]
     pub fn default() -> Self {
         Self { iterations: 6000 }
     }
@@ -32,6 +33,7 @@ impl MiniMaxConfig {
         }
     }
 
+    #[cfg(test)]
     pub fn default() -> Self {
         Self { depth: 11 }
     }
