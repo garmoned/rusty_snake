@@ -19,4 +19,7 @@ COPY ./src ./src
 RUN rm ./target/release/deps/rusty_snake*
 RUN cargo install --path .
 
-CMD ROCKET_LOG_LEVEL=debug ROCKET_PORT=$PORT rusty_snake
+# 6. Configure Rocket correctly.
+COPY ./Rocket.toml ./Rocket.toml
+
+CMD rusty_snake
