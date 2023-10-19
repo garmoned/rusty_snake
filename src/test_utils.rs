@@ -15,6 +15,7 @@ pub mod scenarios {
     pub const DO_NOT_CIRCLE_FOOD: &str = "./scenarios/do_not_circle_food.json";
     pub const AVOID_HEAD_TO_HEAD_DEATH: &str =
         "./scenarios/avoid_head_to_head_death.json";
+    pub const MULTI_SNAKE: &str = "./scenarios/multi_snake.json";
 
     pub fn load_game_state(path: &str) -> GameState {
         let full_path = PathBuf::from(path);

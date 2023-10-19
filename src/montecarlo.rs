@@ -264,7 +264,7 @@ mod test {
         test_utils::scenarios::{
             get_board, get_scenario, AVOID_DEATH_ADVANCED,
             AVOID_DEATH_GET_FOOD, AVOID_HEAD_TO_HEAD_DEATH, AVOID_SELF_TRAP,
-            DO_NOT_CIRCLE_FOOD, GET_THE_FOOD,
+            DO_NOT_CIRCLE_FOOD, GET_THE_FOOD, MULTI_SNAKE,
         },
         utils::dir_to_string,
     };
@@ -350,5 +350,16 @@ mod test {
         );
         let best_move = dir_to_string(tree.get_best_move());
         assert_ne!(best_move, "right")
+    }
+
+    #[test]
+    fn test_can_handle_multiplayer() {
+        let game_state = get_scenario(MULTI_SNAKE);
+        let mut tree = Tree::new(
+            MonteCarloConfig::default(),
+            game_state.board,
+            game_state.you,
+        );
+        assert_eq!(dir_to_string(tree.get_best_move()).is_empty(), false);
     }
 }

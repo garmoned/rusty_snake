@@ -43,6 +43,12 @@ impl Board {
     pub fn get_valid_moves(&self, snake_id: &str) -> Vec<(i32, i32)> {
         let mut dirs = vec![];
         let snake = self.get_snake(snake_id);
+
+        // A dead snake will stay where it is.
+        if snake.is_eliminated() {
+            return vec![(0, 0)];
+        }
+
         let head = &snake.head;
         for dir in utils::DIRECTIONS {
             let mut coord = Coord::default();
@@ -260,9 +266,12 @@ impl Board {
             if snake.body.is_empty() {
                 panic!("Trying to move snakes with zero length body")
             }
-            if snake.eliminated_cause.is_some() {
-                panic!("Trying to move an eliminated snake")
+
+            // Is this hacky? I don't think so.
+            if dir == (0, 0) {
+                return;
             }
+
             if snake_id == snake.id {
                 let last_index = snake.body.len() - 1;
                 let mut new_head = Coord::default();
@@ -327,7 +336,9 @@ impl Battlesnake {
     }
 
     fn reduce_health(&mut self) {
-        self.health -= 1
+        if self.health > 0 {
+            self.health -= 1
+        }
     }
 
     fn self_collision(&self) -> bool {
