@@ -10,6 +10,8 @@ steps:
         "build",
         "-t",
         "gcr.io/$PROJECT_ID/rustysnake:$COMMIT_SHA",
+        "-t",
+        "gcr.io/$PROJECT_ID/rustysnake:latest",
         "--cache-from",
         "gcr.io/$PROJECT_ID/rustysnake:latest",
         ".",
