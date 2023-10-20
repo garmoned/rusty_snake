@@ -1,21 +1,30 @@
 pub struct MonteCarloConfig {
     pub iterations: i64,
+    pub max_duration: u64,
 }
 
 impl MonteCarloConfig {
     const ITERATIONS: &str = "MONTE_CARLO_ITERATIONS";
+    const MAX_DURATION: &str = "MONTE_CARLO_MAX_DURATION";
     pub fn load() -> Self {
         Self {
             iterations: std::env::var(MonteCarloConfig::ITERATIONS)
                 .unwrap()
                 .parse()
                 .unwrap(),
+            max_duration: std::env::var(MonteCarloConfig::MAX_DURATION)
+                .unwrap_or("400".to_string())
+                .parse()
+                .unwrap_or(400),
         }
     }
 
     #[cfg(test)]
     pub fn default() -> Self {
-        Self { iterations: 6000 }
+        Self {
+            iterations: 6000,
+            max_duration: 100,
+        }
     }
 }
 pub struct MiniMaxConfig {

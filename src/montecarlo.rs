@@ -1,5 +1,9 @@
 use rand::seq::SliceRandom;
-use std::{collections::HashMap, rc::Rc};
+use std::{
+    collections::HashMap,
+    rc::Rc,
+    time::{Duration, Instant},
+};
 
 use crate::{
     config::MonteCarloConfig,
@@ -35,7 +39,7 @@ struct NodeState {
 
 pub struct Tree {
     root: NodeState,
-    iterations: i64,
+    max_duration: u64,
 }
 
 pub struct SnakeTracker {
@@ -74,7 +78,7 @@ impl Tree {
         utils::fix_snake_order(&mut starting_board, starting_snake);
         let snake_tracker = Rc::from(SnakeTracker::new(&starting_board));
         return Self {
-            iterations: config.iterations,
+            max_duration: config.max_duration,
             root: NodeState::new(
                 starting_board,
                 starting_snake_id.clone(),
@@ -98,10 +102,19 @@ impl Tree {
     }
 
     pub fn get_best_move(&mut self) -> (i32, i32) {
+        let start = Instant::now();
+        let max_duration = Duration::from_millis(self.max_duration);
         self.root.expand();
-        for _ in 0..self.iterations {
+        let mut i = 0;
+        loop {
             self.expand_tree();
+            let elasped_time = start.elapsed();
+            if elasped_time >= max_duration {
+                break;
+            }
+            i += 1
         }
+        info!("Ran for {} iterations", i);
         let best_child =
             self.root.children.iter().max_by(|x, y| x.sims.cmp(&y.sims));
         if best_child.is_none() {
