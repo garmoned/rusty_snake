@@ -11,7 +11,7 @@ use crate::{
     utils::{self},
 };
 
-type Dir = (i32, i32);
+pub type Dir = (i32, i32);
 
 #[derive(Clone)]
 struct NodeState {
@@ -99,6 +99,14 @@ impl Tree {
             return;
         }
         promising_node.play_out();
+    }
+
+    pub fn get_root_scores(&self) -> Vec<(Dir, i32)> {
+        let mut dirs = vec![];
+        for child in &self.root.children {
+            dirs.push((child.taken_dir, child.sims))
+        }
+        return dirs;
     }
 
     pub fn get_best_move(&mut self) -> (i32, i32) {

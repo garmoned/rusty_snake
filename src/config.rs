@@ -1,3 +1,4 @@
+#[derive(Clone)]
 pub struct MonteCarloConfig {
     pub iterations: i64,
     pub max_duration: u64,
