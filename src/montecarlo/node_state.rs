@@ -3,7 +3,7 @@ use super::{
     tree::{Dir, SnakeTracker},
 };
 use crate::models::Board;
-use std::{cell::RefCell, rc::Rc};
+use std::rc::Rc;
 
 #[derive(Clone)]
 pub(crate) struct NodeState {
