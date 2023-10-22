@@ -2,10 +2,9 @@ use log::info;
 use serde_json::{json, Value};
 
 use crate::config::Config;
-use crate::minimax;
 use crate::models::{Battlesnake, Board, Game};
-use crate::multitree;
 use crate::utils::dir_to_string;
+use crate::{minimax, montecarlo};
 
 pub fn info() -> Value {
     info!("INFO");
@@ -32,8 +31,11 @@ pub fn get_move(board: &Board, you: &Battlesnake) -> Value {
     let config = Config::load();
     match config.engine {
         crate::config::Engine::MonteCarlo(config) => {
-            let mut tree =
-                multitree::Multitree::new(config, board.clone(), you.clone());
+            let mut tree = montecarlo::multitree::Multitree::new(
+                config,
+                board.clone(),
+                you.clone(),
+            );
             let tup = tree.get_best_move();
             json!({ "move": dir_to_string(tup) })
         }

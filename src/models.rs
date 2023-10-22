@@ -9,7 +9,7 @@ pub struct Game {
     pub timeout: u32,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, Hash)]
 pub struct Board {
     pub height: u32,
     pub width: u32,
@@ -19,7 +19,7 @@ pub struct Board {
     pub winner: Option<String>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, Hash)]
 pub struct Battlesnake {
     pub id: String,
     pub name: String,

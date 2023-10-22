@@ -15,7 +15,6 @@ mod logic;
 mod minimax;
 mod models;
 mod montecarlo;
-mod multitree;
 mod simulation;
 mod test_utils;
 mod utils;

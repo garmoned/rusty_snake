@@ -6,9 +6,10 @@ use std::sync::mpsc::channel;
 use crate::{
     config::MonteCarloConfig,
     models::{Battlesnake, Board},
-    montecarlo::{self, Dir},
     utils,
 };
+
+use super::tree::{Dir, Tree};
 
 pub struct Multitree {
     num_trees: usize,
@@ -36,7 +37,7 @@ impl Multitree {
         (0..self.num_trees)
             .into_par_iter()
             .for_each_with(sender, |s, _| {
-                let mut tree = montecarlo::Tree::new(
+                let mut tree = Tree::new(
                     self.config.clone(),
                     self.starting_board.clone(),
                     self.starting_snake.clone(),
