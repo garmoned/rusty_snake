@@ -30,5 +30,16 @@ steps:
       - "gcr.io/$PROJECT_ID/rustysnake:$COMMIT_SHA"
       - "--region"
       - "us-west2"
+    # Deploy to secondary instance for standard games.
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: gcloud
+    args:
+      - "run"
+      - "deploy"
+      - "rustysnake-standard"
+      - "--image"
+      - "gcr.io/$PROJECT_ID/rustysnake:$COMMIT_SHA"
+      - "--region"
+      - "us-west2"
 images:
   - "gcr.io/$PROJECT_ID/rustysnake:$COMMIT_SHA"
