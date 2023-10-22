@@ -11,13 +11,14 @@ use crate::{
     utils::{self},
 };
 
-use super::node_state::NodeState;
+use super::{node_state::NodeState, rave::RaveTable};
 
 pub type Dir = (i32, i32);
 
 pub struct Tree {
     root: NodeState,
     max_duration: u64,
+    rave_table: RaveTable,
 }
 
 pub struct SnakeTracker {
@@ -56,6 +57,7 @@ impl Tree {
         utils::fix_snake_order(&mut starting_board, starting_snake);
         let snake_tracker = Rc::from(SnakeTracker::new(&starting_board));
         return Self {
+            rave_table: RaveTable::new(),
             max_duration: config.max_duration,
             root: NodeState::new(
                 starting_board,
@@ -66,17 +68,17 @@ impl Tree {
     }
 
     fn expand_tree(&mut self) {
-        let promising_node = self.root.select_node();
+        let promising_node = self.root.select_node(&mut self.rave_table);
         promising_node.expand();
         if promising_node.children.len() > 0 {
             promising_node
                 .children
                 .choose_mut(&mut rand::thread_rng())
                 .unwrap()
-                .play_out();
+                .play_out(&mut self.rave_table);
             return;
         }
-        promising_node.play_out();
+        promising_node.play_out(&mut self.rave_table);
     }
 
     pub fn get_root_scores(&self) -> Vec<(Dir, i32)> {
