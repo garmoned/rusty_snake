@@ -13,7 +13,7 @@ pub(crate) struct NodeState {
     pub(crate) board_state: Board,
 
     // The snake who is about to make a move.
-    current_snake: String,
+    pub(crate) current_snake: String,
 
     // The snake who just acted.
     pub(crate) snake_who_moved: String,
@@ -38,6 +38,7 @@ impl NodeState {
         current_snake: String,
         snake_tracker: Rc<SnakeTracker>,
     ) -> Self {
+        let snake_who_moved = snake_tracker.get_prev_snake(&current_snake);
         NodeState {
             taken_dir: (1, 0),
             current_snake,
@@ -46,7 +47,7 @@ impl NodeState {
             parent: None,
             children: vec![],
             board_state,
-            snake_who_moved: "none".to_string(),
+            snake_who_moved: snake_who_moved.to_owned(),
             snake_tracker: snake_tracker,
         }
     }
@@ -80,7 +81,6 @@ impl NodeState {
             let mut new_board = self.board_state.clone();
             new_board.execute_dir(&self.current_snake, dir);
             let snake_tracker = self.snake_tracker.clone();
-            let snake_tracker = snake_tracker;
             let next_snake = snake_tracker.get_next_snake(&self.current_snake);
             let snake_tracker = &self.snake_tracker;
             children.push(NodeState::new_child(
@@ -175,7 +175,7 @@ impl NodeState {
         }
         let discover =
             ((parent_sims + 1.0).ln() / self.sims()).sqrt() * NodeState::C;
-        let reward = self.rave_utc(parent_sims, rave_value);
+        let reward = self.wins() / self.sims();
         return reward + discover;
     }
 

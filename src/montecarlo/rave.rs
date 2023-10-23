@@ -4,7 +4,7 @@ use std::{
 };
 
 use super::{node_state::NodeState, tree::Dir};
-use crate::models::Board;
+use crate::models::Coord;
 use std::hash::{BuildHasher, Hasher};
 
 #[derive(Clone)]
@@ -15,7 +15,7 @@ struct RaveState {
 
 #[derive(Hash, Clone)]
 struct RaveKey {
-    board: Board,
+    head_loc: Coord,
     snake_who_moved: String,
     taken_dir: Dir,
 }
@@ -93,8 +93,12 @@ impl RaveTable {
 
     fn get_key(&mut self, node: &NodeState) -> RaveHash {
         let key = RaveKey {
-            board: node.board_state.clone(),
-            snake_who_moved: node.snake_who_moved.clone(),
+            head_loc: node
+                .board_state
+                .get_snake(&node.snake_who_moved)
+                .head
+                .clone(),
+            snake_who_moved: node.current_snake.clone(),
             taken_dir: node.taken_dir,
         };
         key.to_rave_hash(&self.random)

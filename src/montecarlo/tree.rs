@@ -45,6 +45,13 @@ impl SnakeTracker {
         let next_index = self.snake_map[current_snake] + 1;
         return &self.snake_vec[next_index % self.snake_vec.len()];
     }
+
+    pub fn get_prev_snake(&self, current_snake: &str) -> &str {
+        let current_index = self.snake_map[current_snake];
+        let prev_index =
+            (current_index + self.snake_vec.len() - 1) % self.snake_vec.len();
+        return &self.snake_vec[prev_index];
+    }
 }
 
 impl Tree {
