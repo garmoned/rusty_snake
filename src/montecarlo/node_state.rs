@@ -1,7 +1,4 @@
-use super::{
-    rave::RaveTable,
-    tree::{Dir, SnakeTracker},
-};
+use super::tree::{Dir, SnakeTracker};
 use crate::models::Board;
 use std::rc::Rc;
 
@@ -31,7 +28,6 @@ pub(crate) struct NodeState {
 
 impl NodeState {
     const C: f64 = 1.141;
-    const K: f64 = 0.56;
 
     pub fn new(
         board_state: Board,
@@ -105,7 +101,7 @@ impl NodeState {
         self.parent = Some(parent as *mut NodeState)
     }
 
-    pub fn play_out(&mut self, rave_table: &mut RaveTable) {
+    pub fn play_out(&mut self) {
         let mut board_copy = self.board_state.clone();
         let mut end_state = board_copy.get_endstate();
         let mut current_snake = self.current_snake.clone();
@@ -116,35 +112,29 @@ impl NodeState {
         }
         match end_state {
             crate::simulation::EndState::Winner(winner) => {
-                self.back_prop(&winner, rave_table)
+                self.back_prop(&winner)
             }
-            crate::simulation::EndState::Tie => {
-                self.back_prop("tie", rave_table)
-            }
+            crate::simulation::EndState::Tie => self.back_prop("tie"),
             crate::simulation::EndState::Playing => {
                 panic!("somehow the end state ended with playing")
             }
         }
     }
 
-    pub fn back_prop(&mut self, winner: &str, rave_table: &mut RaveTable) {
+    pub fn back_prop(&mut self, winner: &str) {
         if self.snake_who_moved == winner {
             self.wins += 1;
         }
-        rave_table.update_node(&self, self.snake_who_moved == winner);
         self.sims += 1;
         match self.parent {
             Some(parent) => unsafe {
-                parent.as_mut().unwrap().back_prop(winner, rave_table)
+                parent.as_mut().unwrap().back_prop(winner)
             },
             None => { /* Do nothing */ }
         }
     }
 
-    pub fn select_node(
-        &mut self,
-        rave_table: &mut RaveTable,
-    ) -> &mut NodeState {
+    pub fn select_node(&mut self) -> &mut NodeState {
         if self.children.is_empty() {
             return self;
         }
@@ -153,12 +143,10 @@ impl NodeState {
             .children
             .iter_mut()
             .max_by(|x, y| {
-                let x_val = x.utc_val(parent_sims, rave_table.get_amaf(x));
-                let y_val = y.utc_val(parent_sims, rave_table.get_amaf(y));
-                x_val.total_cmp(&y_val)
+                x.utc_val(parent_sims).total_cmp(&y.utc_val(parent_sims))
             })
             .unwrap()
-            .select_node(rave_table);
+            .select_node();
     }
 
     pub fn sims(&self) -> f64 {
@@ -169,7 +157,7 @@ impl NodeState {
         return self.wins as f64;
     }
 
-    pub fn utc_val(&self, parent_sims: f64, rave_value: f64) -> f64 {
+    pub fn utc_val(&self, parent_sims: f64) -> f64 {
         if self.sims == 0 {
             return f64::INFINITY;
         }
@@ -177,15 +165,5 @@ impl NodeState {
             ((parent_sims + 1.0).ln() / self.sims()).sqrt() * NodeState::C;
         let reward = self.wins() / self.sims();
         return reward + discover;
-    }
-
-    pub fn rave_utc(&self, parent_sims: f64, rave_value: f64) -> f64 {
-        let beta = self.beta(parent_sims);
-        let utc = self.wins() / self.sims();
-        (1.0 - beta) * utc + rave_value * beta
-    }
-
-    fn beta(&self, parent_sims: f64) -> f64 {
-        (NodeState::K / 3.0 * parent_sims + NodeState::K).sqrt()
     }
 }
