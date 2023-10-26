@@ -75,23 +75,19 @@ impl Board {
     ) -> bool {
         for other_snake in &self.snakes {
             for (index, bod) in other_snake.body.iter().enumerate() {
+                // Do not check for collisions with own head.
+                if index == 0 {
+                    continue;
+                }
                 // It is valid to move into your own tail.
                 if snake_id == other_snake.id
                     && index == other_snake.body.len() - 1
                 {
                     continue;
                 }
-                if !bod.intersect(coord) {
-                    continue;
+                if bod.intersect(coord) {
+                    return true;
                 }
-                // Ignore head collisions where we win.
-                if index == 0
-                    && other_snake.body.len()
-                        < self.get_snake(snake_id).body.len()
-                {
-                    continue;
-                }
-                return true;
             }
         }
         return false;
