@@ -2,6 +2,7 @@ use rayon::prelude::*;
 use std::collections::HashMap;
 use std::ops::Add;
 use std::sync::mpsc::channel;
+use std::time::Instant;
 
 use crate::{
     config::MonteCarloConfig,
@@ -32,6 +33,7 @@ impl Multitree {
         }
     }
     pub fn get_best_move(&mut self) -> (i32, i32) {
+        let start_time = Instant::now();
         let mut dir_map = HashMap::<Dir, i32>::new();
         let (sender, reciever) = channel();
         (0..self.num_trees)
@@ -42,7 +44,7 @@ impl Multitree {
                     self.starting_board.clone(),
                     self.starting_snake.clone(),
                 );
-                tree.get_best_move();
+                tree.get_best_move_with_start_time(start_time.clone());
                 s.send(tree.get_root_scores()).unwrap()
             });
         for root_results in reciever.into_iter() {

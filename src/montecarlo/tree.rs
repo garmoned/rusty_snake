@@ -94,8 +94,15 @@ impl Tree {
         return dirs;
     }
 
+    #[cfg(test)]
     pub fn get_best_move(&mut self) -> (i32, i32) {
-        let start = Instant::now();
+        return self.get_best_move_with_start_time(Instant::now());
+    }
+
+    pub fn get_best_move_with_start_time(
+        &mut self,
+        start: Instant,
+    ) -> (i32, i32) {
         let max_duration = Duration::from_millis(self.max_duration);
         self.root.expand();
         let mut i = 0;
