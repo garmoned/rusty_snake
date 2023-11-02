@@ -164,6 +164,11 @@ impl NodeState {
         let discover =
             ((parent_sims + 1.0).ln() / self.sims()).sqrt() * NodeState::C;
         let reward = self.wins() / self.sims();
-        return reward + discover;
+        return reward + discover + self.heuristic();
+    }
+
+    pub fn heuristic(&self) -> f64 {
+        self.board_state.get_snake(&self.snake_who_moved).body.len() as f64
+            / (self.sims() + 1.0)
     }
 }
