@@ -57,7 +57,8 @@ impl Board {
             if !coord.in_bounds(self.width(), self.height()) {
                 continue;
             }
-            if self.intersect_any_snake_body(&coord, snake_id) {
+            if self.intersect_any_snake_body(&coord, snake_id, snake.body.len())
+            {
                 continue;
             }
             dirs.push(dir)
@@ -72,19 +73,22 @@ impl Board {
         &self,
         coord: &Coord,
         snake_id: &str,
+        len: usize,
     ) -> bool {
         for other_snake in &self.snakes {
             for (index, bod) in other_snake.body.iter().enumerate() {
-                // Do not check for collisions with own head.
-                if index == 0 {
-                    continue;
-                }
                 // It is valid to move into your own tail.
                 if snake_id == other_snake.id
                     && index == other_snake.body.len() - 1
                 {
                     continue;
                 }
+                // It is valid to move into snakes with lower length than you.
+                // Also avoids ties entirely.
+                if index == 0 && other_snake.body.len() <= len {
+                    continue;
+                }
+                // Moving into anything else is invalid.
                 if bod.intersect(coord) {
                     return true;
                 }

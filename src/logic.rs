@@ -11,9 +11,9 @@ pub fn info() -> Value {
     json!({
         "apiversion": "1",
         "author": "count_zero",
-        "color": "#3b228c",
-        "head": "pop-star",
-        "tail": "shiny",
+        "color": "#07dbca",
+        "head": "dragon",
+        "tail": "mlh-gene",
     })
 }
 
