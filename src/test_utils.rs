@@ -4,7 +4,7 @@ pub mod scenarios {
     use crate::models::GameState;
     use std::{fs, path::PathBuf};
 
-    const TEST_REQUEST: &str = "./scenarios/test_request.json";
+    pub const TEST_REQUEST: &str = "./scenarios/test_request.json";
     const GAME_OVER: &str = "./scenarios/end_game.json";
     pub const AVOID_DEATH_GET_FOOD: &str =
         "./scenarios/avoid_death_get_food.json";

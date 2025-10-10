@@ -422,7 +422,7 @@ impl Battlesnake {
 #[cfg(test)]
 mod test {
     use crate::{
-        simulation::EndState,
+        board::EndState,
         test_utils::scenarios::{
             game_over_board, get_board, get_scenario, AVOID_DEATH_GET_FOOD,
             GET_THE_FOOD,

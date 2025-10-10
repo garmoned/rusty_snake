@@ -1,6 +1,5 @@
 #[macro_use]
 extern crate rocket;
-
 use log::info;
 use models::GameState;
 use rocket::fairing::AdHoc;
@@ -11,11 +10,12 @@ use std::env;
 
 mod config;
 mod floodfill;
+mod learning;
 mod logic;
 mod minimax;
 mod models;
 mod montecarlo;
-mod simulation;
+mod board;
 mod test_utils;
 mod utils;
 

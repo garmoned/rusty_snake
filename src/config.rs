@@ -20,7 +20,6 @@ impl MonteCarloConfig {
         }
     }
 
-    #[cfg(test)]
     pub fn default() -> Self {
         Self {
             iterations: 6000,

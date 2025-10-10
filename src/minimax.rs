@@ -4,7 +4,7 @@ use crate::{
     config::MiniMaxConfig,
     floodfill::floodfill,
     models::{Battlesnake, Board},
-    simulation::{Action, EndState},
+    board::{Action, EndState},
     utils::{self, dir_to_string},
 };
 

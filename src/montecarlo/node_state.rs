@@ -1,5 +1,6 @@
 use super::tree::{Dir, SnakeTracker};
 use crate::models::Board;
+use crate::montecarlo::evaulator::Evaluator;
 use std::rc::Rc;
 
 #[derive(Clone)]
@@ -24,6 +25,8 @@ pub(crate) struct NodeState {
     // Shared ownership by the nodes.
     // Too lazy to do ownership stuff for just a helper object.
     snake_tracker: Rc<SnakeTracker>,
+    // Shared reference to an evaluator used by all nodes.
+    evaulator: Rc<dyn Evaluator>,
 }
 
 impl NodeState {
@@ -33,6 +36,7 @@ impl NodeState {
         board_state: Board,
         current_snake: String,
         snake_tracker: Rc<SnakeTracker>,
+        evaulator: Rc<dyn Evaluator>,
     ) -> Self {
         let snake_who_moved = snake_tracker.get_prev_snake(&current_snake);
         NodeState {
@@ -45,6 +49,7 @@ impl NodeState {
             board_state,
             snake_who_moved: snake_who_moved.to_owned(),
             snake_tracker: snake_tracker,
+            evaulator: evaulator,
         }
     }
 
@@ -54,6 +59,7 @@ impl NodeState {
         snake_who_moved: String,
         snake_tracker: Rc<SnakeTracker>,
         taken_dir: Dir,
+        evaulator: Rc<dyn Evaluator>,
     ) -> Self {
         NodeState {
             current_snake,
@@ -65,6 +71,7 @@ impl NodeState {
             children: vec![],
             board_state,
             snake_tracker: snake_tracker,
+            evaulator: evaulator,
         }
     }
 
@@ -85,6 +92,7 @@ impl NodeState {
                 self.current_snake.clone(),
                 snake_tracker.clone(),
                 dir,
+                self.evaulator.clone(),
             ))
         }
         for child in &mut children {
@@ -111,11 +119,9 @@ impl NodeState {
             current_snake = self.get_next_snake(&current_snake);
         }
         match end_state {
-            crate::simulation::EndState::Winner(winner) => {
-                self.back_prop(&winner)
-            }
-            crate::simulation::EndState::Tie => self.back_prop("tie"),
-            crate::simulation::EndState::Playing => {
+            crate::board::EndState::Winner(winner) => self.back_prop(&winner),
+            crate::board::EndState::Tie => self.back_prop("tie"),
+            crate::board::EndState::Playing => {
                 panic!("somehow the end state ended with playing")
             }
         }

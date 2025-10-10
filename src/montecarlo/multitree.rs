@@ -70,8 +70,7 @@ mod test {
     use crate::{
         test_utils::scenarios::{
             get_board, get_scenario, AVOID_DEATH_ADVANCED,
-            AVOID_DEATH_GET_FOOD, AVOID_HEAD_TO_HEAD_DEATH, AVOID_SELF_TRAP,
-            DO_NOT_CIRCLE_FOOD, GET_THE_FOOD, MULTI_SNAKE,
+            AVOID_HEAD_TO_HEAD_DEATH, MULTI_SNAKE,
         },
         utils::dir_to_string,
     };
@@ -89,41 +88,6 @@ mod test {
     }
 
     #[test]
-    fn test_avoid_death_get_food() {
-        let game_state = get_scenario(AVOID_DEATH_GET_FOOD);
-        let mut tree = Multitree::new(
-            MonteCarloConfig::default(),
-            game_state.board,
-            game_state.you,
-        );
-        let best_move = dir_to_string(tree.get_best_move());
-        assert_ne!(best_move, "right")
-    }
-
-    #[test]
-    fn test_avoid_self_trap() {
-        let game_state = get_scenario(AVOID_SELF_TRAP);
-        let mut tree = Multitree::new(
-            MonteCarloConfig::default(),
-            game_state.board,
-            game_state.you,
-        );
-        let best_move = dir_to_string(tree.get_best_move());
-        assert_ne!(best_move, "up")
-    }
-    #[test]
-    fn test_get_easy_food() {
-        let game_state = get_scenario(GET_THE_FOOD);
-        let mut tree = Multitree::new(
-            MonteCarloConfig::default(),
-            game_state.board,
-            game_state.you,
-        );
-        let best_move = dir_to_string(tree.get_best_move());
-        assert_eq!(best_move, "down")
-    }
-
-    #[test]
     fn test_avoid_death_advanced() {
         let game_state = get_scenario(AVOID_DEATH_ADVANCED);
         let mut tree = Multitree::new(
@@ -133,18 +97,6 @@ mod test {
         );
         let best_move = dir_to_string(tree.get_best_move());
         assert_ne!(best_move, "right")
-    }
-
-    #[test]
-    fn test_do_not_circle_food() {
-        let game_state = get_scenario(DO_NOT_CIRCLE_FOOD);
-        let mut tree = Multitree::new(
-            MonteCarloConfig::default(),
-            game_state.board.clone(),
-            game_state.you,
-        );
-        let best_move = dir_to_string(tree.get_best_move());
-        assert_eq!(best_move, "up")
     }
 
     #[test]

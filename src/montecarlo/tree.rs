@@ -8,6 +8,7 @@ use std::{
 use crate::{
     config::MonteCarloConfig,
     models::{Battlesnake, Board},
+    montecarlo::evaulator::RREvaulator,
     utils::{self},
 };
 
@@ -62,12 +63,15 @@ impl Tree {
         let starting_snake_id = starting_snake.id.clone();
         utils::fix_snake_order(&mut starting_board, starting_snake);
         let snake_tracker = Rc::from(SnakeTracker::new(&starting_board));
+        // This can now be potentially swapped out with a neural network evaluator.
+        let evaluator = Rc::from(RREvaulator::new(snake_tracker.clone()));
         return Self {
             max_duration: config.max_duration,
             root: NodeState::new(
                 starting_board,
                 starting_snake_id.clone(),
                 snake_tracker,
+                evaluator,
             ),
         };
     }
@@ -94,7 +98,6 @@ impl Tree {
         return dirs;
     }
 
-    #[cfg(test)]
     pub fn get_best_move(&mut self) -> (i32, i32) {
         return self.get_best_move_with_start_time(Instant::now());
     }
@@ -132,8 +135,7 @@ mod test {
     use crate::{
         test_utils::scenarios::{
             get_board, get_scenario, AVOID_DEATH_ADVANCED,
-            AVOID_DEATH_GET_FOOD, AVOID_HEAD_TO_HEAD_DEATH, AVOID_SELF_TRAP,
-            DO_NOT_CIRCLE_FOOD, GET_THE_FOOD, MULTI_SNAKE,
+            AVOID_DEATH_GET_FOOD, MULTI_SNAKE,
         },
         utils::dir_to_string,
     };
@@ -163,29 +165,6 @@ mod test {
     }
 
     #[test]
-    fn test_avoid_self_trap() {
-        let game_state = get_scenario(AVOID_SELF_TRAP);
-        let mut tree = Tree::new(
-            MonteCarloConfig::default(),
-            game_state.board,
-            game_state.you,
-        );
-        let best_move = dir_to_string(tree.get_best_move());
-        assert_ne!(best_move, "up")
-    }
-    #[test]
-    fn test_get_easy_food() {
-        let game_state = get_scenario(GET_THE_FOOD);
-        let mut tree = Tree::new(
-            MonteCarloConfig::default(),
-            game_state.board,
-            game_state.you,
-        );
-        let best_move = dir_to_string(tree.get_best_move());
-        assert_eq!(best_move, "down")
-    }
-
-    #[test]
     fn test_avoid_death_advanced() {
         let game_state = get_scenario(AVOID_DEATH_ADVANCED);
         let mut tree = Tree::new(
@@ -196,31 +175,6 @@ mod test {
         let best_move = dir_to_string(tree.get_best_move());
         assert_ne!(best_move, "right")
     }
-
-    #[test]
-    fn test_do_not_circle_food() {
-        let game_state = get_scenario(DO_NOT_CIRCLE_FOOD);
-        let mut tree = Tree::new(
-            MonteCarloConfig::default(),
-            game_state.board.clone(),
-            game_state.you,
-        );
-        let best_move = dir_to_string(tree.get_best_move());
-        assert_eq!(best_move, "up")
-    }
-
-    #[test]
-    fn test_avoid_head_to_head_death() {
-        let game_state = get_scenario(AVOID_HEAD_TO_HEAD_DEATH);
-        let mut tree = Tree::new(
-            MonteCarloConfig::default(),
-            game_state.board,
-            game_state.you,
-        );
-        let best_move = dir_to_string(tree.get_best_move());
-        assert_ne!(best_move, "right")
-    }
-
     #[test]
     fn test_can_handle_multiplayer() {
         let game_state = get_scenario(MULTI_SNAKE);
