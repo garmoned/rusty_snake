@@ -1,23 +1,67 @@
 use std::convert::TryInto;
 
+use candle_core::error;
+use candle_core::DType;
 use candle_core::Device;
 use candle_core::Tensor;
+use candle_nn::conv2d_no_bias;
+use candle_nn::linear;
+use candle_nn::Conv2d;
+use candle_nn::Conv2dConfig;
+use candle_nn::Linear;
+use candle_nn::Module;
+use candle_nn::VarBuilder;
+use candle_nn::VarMap;
 
 use crate::models::Board;
 use crate::models::Coord;
+use crate::montecarlo::evaulator::Evaluator;
 use crate::utils;
-use crate::{board, montecarlo::evaulator::Evaluator};
 
 const BOARD_SIZE: usize = 11;
 const NUM_SNAKES: usize = 2;
 
+pub struct SimpleConv {
+    cv1: Conv2d,
+    ln1: Linear,
+    ln2: Linear,
+}
+
+impl SimpleConv {
+    fn new(vb: VarBuilder) -> Result<Self, candle_core::error::Error> {
+        let cv1 =
+            conv2d_no_bias(5, 20, 3, Conv2dConfig::default(), vb.pp("cv1"))?;
+        let ln1 = linear(1620, 200, vb.pp("ln1"))?;
+        let ln2 = linear(200, 2, vb.pp("ln2"))?;
+        return Ok(Self { cv1, ln1, ln2 });
+    }
+
+    fn forward(&self, x: Tensor) -> Result<Tensor, candle_core::error::Error> {
+        let x = self.cv1.forward(&x).unwrap();
+        // Flatten everything but the batch dimension.
+        let x = x.flatten(1, x.dims().len() - 1).unwrap();
+        let x = x.relu().unwrap();
+        let x = self.ln1.forward(&x).unwrap().relu().unwrap();
+        let x = self.ln2.forward(&x).unwrap();
+        // This should be a 1 dimensional matrix now.
+        let x = candle_nn::ops::softmax(&x, 1)?;
+        return Ok(x);
+    }
+}
+
 // Uses a neural network to determine the winner from a
 // given board state.
-pub struct NNEvaulator {}
+pub struct NNEvaulator {
+    model: SimpleConv,
+}
 
 impl NNEvaulator {
-    pub fn new() -> Self {
-        return Self {};
+    pub fn new(dev: &Device) -> Result<Self, error::Error> {
+        let varmap = VarMap::new();
+        let vs = VarBuilder::from_varmap(&varmap, DType::F64, dev);
+        return Ok(Self {
+            model: SimpleConv::new(vs.clone())?,
+        });
     }
 
     // Takes in a single vector of points and encodes them into an 11x11
@@ -63,11 +107,6 @@ impl NNEvaulator {
         board: &Board,
         current_snake: &str,
     ) -> Tensor {
-        // Sort the snakes such that the current snake comes first.
-        let starter_snake = board.get_snake(current_snake);
-        let mut board = board.clone();
-        utils::fix_snake_order(&mut board, starter_snake.clone());
-
         // Generate a channel layer for each snake and their head.
         let mut channels: Vec<Tensor> = vec![];
         for snake in &board.snakes {
@@ -79,13 +118,31 @@ impl NNEvaulator {
         }
         // Add the food channel last.
         channels.push(self.one_hot_encode(&board.food));
-        return Tensor::stack(&channels, 2).unwrap();
+        let batch = [Tensor::stack(&channels, 0).unwrap()];
+        return Tensor::stack(&batch, 0).unwrap();
     }
 }
 
 impl Evaluator for NNEvaulator {
     fn predict_winner(&self, board: &Board, current_snake: &str) -> String {
-        todo!()
+        let starter_snake = board.get_snake(current_snake);
+        let mut board = board.clone();
+        utils::fix_snake_order(&mut board, starter_snake.clone());
+
+        let input_tensor = self.generate_input_tensor(&board, current_snake);
+        let output = self.model.forward(input_tensor).unwrap();
+        let output = output.flatten(0, output.dims().len() - 1).unwrap();
+        let output = output.to_vec1::<f64>().unwrap();
+
+        let mut max_idx = 0;
+        let mut max_v = 0.0;
+        for (idx, v) in output.iter().enumerate() {
+            if v > &max_v {
+                max_idx = idx;
+                max_v = *v;
+            }
+        }
+        return board.snakes[max_idx].id.clone();
     }
 }
 
@@ -101,13 +158,15 @@ mod test {
     // Verifies basic behavior about the snake.
     #[test]
     fn test_one_channel() -> Result<(), Box<dyn std::error::Error>> {
+        let device = Device::Cpu;
+
         let mut vec: Vec<Coord> = vec![];
         vec.push(Coord { x: 10, y: 10 });
         vec.push(Coord { x: 0, y: 0 });
         vec.push(Coord { x: 5, y: 5 });
         vec.push(Coord { x: 3, y: 10 });
 
-        let nn_eval = NNEvaulator::new();
+        let nn_eval = NNEvaulator::new(&device)?;
         let tensor = nn_eval.one_hot_encode(&vec);
         let o_vec = tensor.to_vec2::<f64>()?;
 
@@ -123,12 +182,25 @@ mod test {
 
     #[test]
     fn generate_input_tensor() -> Result<(), Box<dyn std::error::Error>> {
+        let device = Device::Cpu;
         let board = get_board();
 
-        let nn_eval = NNEvaulator::new();
+        let nn_eval = NNEvaulator::new(&device)?;
         let tensor = nn_eval.generate_input_tensor(&board.board, &board.you.id);
 
-        assert_eq!(tensor.dims(), [11, 11, 5]);
+        assert_eq!(tensor.dims(), [1, 5, 11, 11]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn evaulate_board() -> Result<(), Box<dyn std::error::Error>> {
+        let device = Device::Cpu;
+        let board = get_board();
+        let nn_eval = NNEvaulator::new(&device)?;
+
+        // Expect that it returned a valid string
+        assert!(nn_eval.predict_winner(&board.board, &board.you.id).len() > 0);
 
         Ok(())
     }
