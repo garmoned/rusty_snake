@@ -101,8 +101,8 @@ impl Trainer {
         Self {
             agents: agent,
             move_logger: MoveLogger::new(),
-            batch_size: 10,
-            batches: 2,
+            batch_size: 1,
+            batches: 1,
             init_board: board.clone(),
         }
     }
@@ -162,7 +162,7 @@ impl Trainer {
 mod test {
 
     use super::*;
-    use crate::test_utils::scenarios::{get_board, get_scenario, TEST_REQUEST};
+    use crate::test_utils::scenarios::{ get_scenario, TEST_REQUEST};
 
     // Verifies basic behavior about the snake.
     #[test]
