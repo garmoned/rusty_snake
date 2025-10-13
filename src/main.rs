@@ -7,7 +7,7 @@ use rocket::http::Status;
 use rocket::serde::json::Json;
 use serde_json::Value;
 use std::env;
-
+mod board;
 mod config;
 mod floodfill;
 mod learning;
@@ -15,7 +15,6 @@ mod logic;
 mod minimax;
 mod models;
 mod montecarlo;
-mod board;
 mod test_utils;
 mod utils;
 

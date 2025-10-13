@@ -1,17 +1,32 @@
+use std::{any::Any, usize};
+
 use crate::{
     config::MonteCarloConfig,
     models::{Battlesnake, Board},
-    montecarlo::tree::Tree,
+    montecarlo::{nn_evaluator::SimpleConv, tree::Tree},
 };
 
 #[derive(Debug, Clone, Hash)]
-struct MoveLog {
+pub struct MoveLog {
     // The player who just made the move.
-    player: String,
+    pub player: String,
     // The resulting board state.
-    board: Board,
+    pub board: Board,
     // The player who won from this board state.
-    winner: String,
+    pub winner: String,
+}
+
+impl MoveLog {
+    // Returns a one hot encoded winner based
+    // on the order of the snakes in the board state.
+    pub fn get_winner_index(&self) -> u32 {
+        for (idx, bs) in self.board.snakes.iter().enumerate() {
+            if bs.id == self.winner {
+                return idx as u32;
+            }
+        }
+        return 0;
+    }
 }
 
 struct MoveLogger {
@@ -73,7 +88,7 @@ impl Agent {
 }
 
 // Trains a given model through self play.
-struct Trainer {
+pub struct Trainer {
     // The configured agents.
     // Will eventually hold a shared reference to the model being trained.
     agents: Vec<Agent>,
@@ -90,6 +105,11 @@ struct Trainer {
 
     // The initial board state that all games will start from.
     init_board: Board,
+
+    // The network to train.
+    //
+    // This should be an interface so we can train different models.
+    model: SimpleConv,
 }
 
 impl Trainer {
@@ -101,16 +121,17 @@ impl Trainer {
         Self {
             agents: agent,
             move_logger: MoveLogger::new(),
-            batch_size: 1,
+            batch_size: 10,
             batches: 1,
             init_board: board.clone(),
+
+            // We should clean up these unwraps.
+            model: SimpleConv::new().unwrap(),
         }
     }
 
-    pub fn train(&mut self) {
-        // Does nothing for now.
-        // Here we should convert all of the move logger moves
-        // into tensors and feed them into the model.
+    fn train(&mut self) {
+        self.model.train(&self.move_logger.current_batch).unwrap();
     }
 
     pub fn play_game(&mut self) {
@@ -142,8 +163,10 @@ impl Trainer {
 
     pub fn play_batch(&mut self) {
         // These games could all be potentially parralelized.
-        for _ in 0..self.batch_size {
+        let batch_size = self.batch_size;
+        for i in 0..self.batch_size {
             self.play_game();
+            println!("Finished {i} out of {batch_size} games")
         }
     }
 
@@ -162,7 +185,7 @@ impl Trainer {
 mod test {
 
     use super::*;
-    use crate::test_utils::scenarios::{ get_scenario, TEST_REQUEST};
+    use crate::test_utils::scenarios::{get_scenario, TEST_REQUEST};
 
     // Verifies basic behavior about the snake.
     #[test]

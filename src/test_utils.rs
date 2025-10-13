@@ -1,4 +1,3 @@
-#[cfg(test)]
 pub mod scenarios {
 
     use crate::models::GameState;
