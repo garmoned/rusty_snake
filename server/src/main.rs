@@ -1,22 +1,13 @@
 #[macro_use]
 extern crate rocket;
-use log::info;
-use models::GameState;
+use rocket::info;
 use rocket::fairing::AdHoc;
 use rocket::http::Status;
 use rocket::serde::json::Json;
 use serde_json::Value;
+use snake_lib::logic;
+use snake_lib::models::GameState;
 use std::env;
-mod board;
-mod config;
-mod floodfill;
-mod learning;
-mod logic;
-mod minimax;
-mod models;
-mod montecarlo;
-mod test_utils;
-mod utils;
 
 #[get("/")]
 fn handle_index() -> Json<Value> {

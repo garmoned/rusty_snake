@@ -1,5 +1,3 @@
-use std::{any::Any, usize};
-
 use crate::{
     config::MonteCarloConfig,
     models::{Battlesnake, Board},
@@ -121,7 +119,7 @@ impl Trainer {
         Self {
             agents: agent,
             move_logger: MoveLogger::new(),
-            batch_size: 10,
+            batch_size: 2,
             batches: 1,
             init_board: board.clone(),
 
@@ -178,6 +176,14 @@ impl Trainer {
             // Clear all moves between batches.
             self.move_logger.clear_all();
         }
+        println!("Training run finished");
+        let r = self.model.save("../../data/model");
+        match r {
+            Ok(_) => println!("Model saved successfully"),
+            Err(err) => {
+                println!("Model failed to save: {:?}", err);
+            }
+        };
     }
 }
 

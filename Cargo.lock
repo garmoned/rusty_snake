@@ -1591,22 +1591,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
 
 [[package]]
-name = "rusty_snake"
-version = "1.0.0"
-dependencies = [
- "candle-core",
- "candle-nn",
- "dotenv",
- "env_logger",
- "log",
- "rand 0.8.5",
- "rayon",
- "rocket",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "ryu"
 version = "1.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1736,6 +1720,53 @@ name = "smallvec"
 version = "1.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
+
+[[package]]
+name = "snake_lib"
+version = "1.0.0"
+dependencies = [
+ "candle-core",
+ "candle-nn",
+ "dotenv",
+ "env_logger",
+ "log",
+ "rand 0.8.5",
+ "rayon",
+ "rocket",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "snake_server"
+version = "1.0.0"
+dependencies = [
+ "dotenv",
+ "env_logger",
+ "log",
+ "rand 0.8.5",
+ "rocket",
+ "serde",
+ "serde_json",
+ "snake_lib",
+]
+
+[[package]]
+name = "snake_trainer"
+version = "1.0.0"
+dependencies = [
+ "candle-core",
+ "candle-nn",
+ "dotenv",
+ "env_logger",
+ "log",
+ "rand 0.8.5",
+ "rayon",
+ "rocket",
+ "serde",
+ "serde_json",
+ "snake_lib",
+]
 
 [[package]]
 name = "socket2"

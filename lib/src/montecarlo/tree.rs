@@ -117,7 +117,6 @@ impl Tree {
             }
             i += 1
         }
-        info!("Ran for {} iterations", i);
         let best_child =
             self.root.children.iter().max_by(|x, y| x.sims.cmp(&y.sims));
         if best_child.is_none() {

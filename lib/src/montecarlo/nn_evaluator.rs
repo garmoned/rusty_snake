@@ -72,6 +72,10 @@ impl SimpleConv {
         Tensor::from_vec(labels, dim, &Device::Cpu).unwrap()
     }
 
+    pub fn save(&self, path: &str) -> Result<(), error::Error> {
+        self.var_map.save(path)
+    }
+
     // Make this less tightly coupled.
     //
     // Lets assume this is a large amount of moves around 10,000.
