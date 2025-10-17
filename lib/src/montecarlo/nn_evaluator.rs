@@ -1,5 +1,4 @@
 use core::f64;
-use std::convert::TryInto;
 
 use candle_core::error;
 use candle_core::DType;
@@ -22,8 +21,8 @@ use crate::models::Coord;
 use crate::montecarlo::evaulator::Evaluator;
 use crate::utils;
 
-const BOARD_SIZE: usize = 11;
-const NUM_SNAKES: usize = 2;
+// This includes the 11x11 board plus the 2 extra rows and columns for the walls.
+const BOARD_SIZE: usize = 14;
 
 pub struct SimpleConv {
     cv1: Conv2d,
@@ -32,25 +31,30 @@ pub struct SimpleConv {
 
     // Stores parameters for inference and training like loss.
     var_map: VarMap,
+
+    // Device the model is loaded onto.
+    pub device: Device,
 }
 
 impl SimpleConv {
     pub fn new() -> Result<Self, candle_core::error::Error> {
         let var_map = VarMap::new();
+        let device = Device::Cpu;
         // Input matrix size = |batch|x5x11x11.
-        let vb = VarBuilder::from_varmap(&var_map, DType::F64, &Device::Cpu);
+        let vb = VarBuilder::from_varmap(&var_map, DType::F64, &device);
 
         let cv1 =
             conv2d_no_bias(5, 32, 5, Conv2dConfig::default(), vb.pp("cv1"))?;
 
-        // Output matrix size 1568 = |batch|x32x7x7;
-        let ln1 = linear(1568, 200, vb.pp("ln1"))?;
+        // Output matrix size 2592 = |batch|x32x(14-5)x(14-5);
+        let ln1 = linear(3200, 200, vb.pp("ln1"))?;
         let ln2 = linear(200, 2, vb.pp("ln2"))?;
         return Ok(Self {
             cv1,
             ln1,
             ln2,
             var_map,
+            device,
         });
     }
 
@@ -69,7 +73,7 @@ impl SimpleConv {
 
     fn label_batch_tensor(&self, labels: Vec<u32>) -> Tensor {
         let dim = labels.len();
-        Tensor::from_vec(labels, dim, &Device::Cpu).unwrap()
+        Tensor::from_vec(labels, dim, &self.device).unwrap()
     }
 
     pub fn save(&self, path: &str) -> Result<(), error::Error> {
@@ -104,6 +108,8 @@ impl SimpleConv {
             let boards = batch.iter().map(|l| return &l.board).collect();
             let batch_tensor =
                 NNEvaulator::generate_input_tensor_batch(&boards);
+            let batch_tensor = batch_tensor.to_device(&self.device)?;
+
             let inference = self.forward(batch_tensor)?;
             println!("Inference tensor {:?}", inference);
             let targets = self.label_batch_tensor(
@@ -134,19 +140,14 @@ impl NNEvaulator {
         });
     }
 
-    // Takes in a single vector of points and encodes them into an 11x11
+    // Takes in a single vector of points and encodes them into an 14x14
     // tensor one hot encoded.
     pub fn one_hot_encode(points: &Vec<Coord>) -> Tensor {
         let mut grid: Vec<f64> = vec![0.0; BOARD_SIZE * BOARD_SIZE];
 
         for coord in points {
-            if !coord.in_bounds(
-                BOARD_SIZE.try_into().unwrap(),
-                BOARD_SIZE.try_into().unwrap(),
-            ) {
-                panic!("coord is out of bounds something terrible happened.");
-            }
-            let idx = coord.y() * (BOARD_SIZE) + coord.x();
+            // We shift the x and y over 1 to project them from the range [-1, 12]x[-1, 12] to [0, 13][0, 13].
+            let idx = coord.y_shifted(1) * (BOARD_SIZE) + coord.x_shifted(1);
             grid[idx] = 1.0;
         }
         return Tensor::from_vec(grid, (BOARD_SIZE, BOARD_SIZE), &Device::Cpu)
@@ -165,13 +166,13 @@ impl NNEvaulator {
     //
     // The model will have 2 outputs - which correspond to the snake layers.
     //
-    // This means the tensor will be a 1x11x11.
+    // This means the tensor will be a 1x14x14.
     //
-    // Snake 1 body layer 11x11.
-    // Snake 1 head layer 11x11.
-    // Snake 2 body layer 11x11.
-    // Snake 2 head layer 11x11.
-    // Food layer 11x11.
+    // Snake 1 body layer 14x14.
+    // Snake 1 head layer 14x14.
+    // Snake 2 body layer 14x14.
+    // Snake 2 head layer 14x14.
+    // Food layer 14x14.
     fn generate_input_tensor(board: &Board) -> Tensor {
         // Generate a channel layer for each snake and their head.
         let mut channels: Vec<Tensor> = vec![];
@@ -205,6 +206,7 @@ impl Evaluator for NNEvaulator {
         let boards = vec![&board];
 
         let input_tensor = NNEvaulator::generate_input_tensor_batch(&boards);
+        let input_tensor = input_tensor.to_device(&self.model.device).unwrap();
         let output = self.model.forward(input_tensor).unwrap();
         let output = candle_nn::ops::softmax(&output, 1).unwrap();
 
@@ -235,23 +237,23 @@ mod test {
     // Verifies basic behavior about the snake.
     #[test]
     fn test_one_channel() -> Result<(), Box<dyn std::error::Error>> {
-        let device = Device::Cpu;
-
         let mut vec: Vec<Coord> = vec![];
         vec.push(Coord { x: 10, y: 10 });
         vec.push(Coord { x: 0, y: 0 });
         vec.push(Coord { x: 5, y: 5 });
         vec.push(Coord { x: 3, y: 10 });
+        vec.push(Coord { x: -1, y: 12 });
 
         let tensor = NNEvaulator::one_hot_encode(&vec);
         let o_vec = tensor.to_vec2::<f64>()?;
 
         println!("nested tensor: {:?}", o_vec);
 
-        assert_eq!(o_vec[10][10], 1.0);
-        assert_eq!(o_vec[0][0], 1.0);
-        assert_eq!(o_vec[5][5], 1.0);
-        assert_eq!(o_vec[10][3], 1.0);
+        assert_eq!(o_vec[11][11], 1.0);
+        assert_eq!(o_vec[1][1], 1.0);
+        assert_eq!(o_vec[6][6], 1.0);
+        assert_eq!(o_vec[11][4], 1.0);
+        assert_eq!(o_vec[13][0], 1.0);
 
         Ok(())
     }
@@ -262,7 +264,7 @@ mod test {
 
         let tensor = NNEvaulator::generate_input_tensor(&board.board);
 
-        assert_eq!(tensor.dims(), [5, 11, 11]);
+        assert_eq!(tensor.dims(), [5, 14, 14]);
 
         Ok(())
     }
@@ -270,19 +272,16 @@ mod test {
     #[test]
     fn generate_input_tensor_batch() -> Result<(), Box<dyn std::error::Error>> {
         let board = get_board();
-
         let boards = vec![&board.board, &board.board];
-
         let tensor = NNEvaulator::generate_input_tensor_batch(&boards);
 
-        assert_eq!(tensor.dims(), [2, 5, 11, 11]);
+        assert_eq!(tensor.dims(), [2, 5, 14, 14]);
 
         Ok(())
     }
 
     #[test]
     fn evaulate_board() -> Result<(), Box<dyn std::error::Error>> {
-        let device = Device::Cpu;
         let board = get_board();
         let nn_eval = NNEvaulator::new()?;
 

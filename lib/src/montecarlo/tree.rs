@@ -9,7 +9,7 @@ use crate::{
     config::MonteCarloConfig,
     models::{Battlesnake, Board},
     montecarlo::evaulator::RREvaulator,
-    utils::{self},
+    utils::{self, dir_to_string},
 };
 
 use super::node_state::NodeState;
@@ -108,17 +108,16 @@ impl Tree {
     ) -> (i32, i32) {
         let max_duration = Duration::from_millis(self.max_duration);
         self.root.expand();
-        let mut i = 0;
         loop {
             self.expand_tree();
             let elasped_time = start.elapsed();
             if elasped_time >= max_duration {
                 break;
             }
-            i += 1
         }
         let best_child =
             self.root.children.iter().max_by(|x, y| x.sims.cmp(&y.sims));
+
         if best_child.is_none() {
             return (1, 0);
         }

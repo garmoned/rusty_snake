@@ -198,6 +198,7 @@ impl Board {
         if !last_snake {
             return EndState::Playing;
         }
+
         self.reduce_snake_health();
         self.feed_snakes();
         self.eliminate_snakes();

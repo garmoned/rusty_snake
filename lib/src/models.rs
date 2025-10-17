@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{collections::HashMap, convert::TryInto};
+use std::{collections::HashMap, convert::TryInto, ops::Add, usize};
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Game {
@@ -39,10 +39,17 @@ pub struct Coord {
 }
 
 impl Coord {
+    pub fn x_shifted(&self, shift: usize) -> usize {
+        (self.x.add(shift as i32)).try_into().unwrap()
+    }
+
+    pub fn y_shifted(&self, shift: usize) -> usize {
+        (self.y.add(shift as i32)).try_into().unwrap()
+    }
+
     pub fn x(&self) -> usize {
         self.x.try_into().unwrap()
     }
-
     pub fn y(&self) -> usize {
         self.y.try_into().unwrap()
     }

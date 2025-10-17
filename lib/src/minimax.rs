@@ -1,10 +1,10 @@
-use std::{borrow::Borrow, collections::HashMap, thread};
+use std::{collections::HashMap, thread};
 
 use crate::{
+    board::{Action, EndState},
     config::MiniMaxConfig,
     floodfill::floodfill,
     models::{Battlesnake, Board},
-    board::{Action, EndState},
     utils::{self, dir_to_string},
 };
 
@@ -98,7 +98,7 @@ impl Tree {
         utils::fix_snake_order(&mut starting_board, starting_snake);
         let mut snake_vec = vec![];
         let mut snake_map = HashMap::new();
-        for (i, snake) in starting_board.borrow().snakes.iter().enumerate() {
+        for (i, snake) in starting_board.snakes.iter().enumerate() {
             let copy_snake = &snake.id;
             snake_vec.push(copy_snake.clone());
             snake_map.insert(copy_snake.clone(), i);

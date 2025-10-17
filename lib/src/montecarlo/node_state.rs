@@ -1,6 +1,7 @@
 use super::tree::{Dir, SnakeTracker};
 use crate::models::Board;
 use crate::montecarlo::evaulator::Evaluator;
+use crate::utils::dir_to_string;
 use std::rc::Rc;
 
 #[derive(Clone)]

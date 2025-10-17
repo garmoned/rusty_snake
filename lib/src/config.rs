@@ -23,7 +23,7 @@ impl MonteCarloConfig {
     pub fn default() -> Self {
         Self {
             iterations: 6000,
-            max_duration: 100,
+            max_duration: 100, // In milliseconds.
         }
     }
 }

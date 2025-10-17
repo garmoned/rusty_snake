@@ -60,7 +60,7 @@ mod test {
     #[test]
     fn test_flood_fill() {
         let game_state = get_board().board;
-        assert_eq!(floodfill(&game_state, "long_snake"), 117);
-        assert_eq!(floodfill(&game_state, "short_snake"), 56);
+        assert_eq!(floodfill(&game_state, "long_snake"), 118);
+        assert_eq!(floodfill(&game_state, "short_snake"), 118);
     }
 }

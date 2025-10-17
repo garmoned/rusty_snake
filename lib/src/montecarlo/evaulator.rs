@@ -27,7 +27,7 @@ impl Evaluator for RREvaulator {
     fn predict_winner(&self, board: &Board, current_snake: &str) -> String {
         let mut board_copy = board.clone();
         let mut end_state = board_copy.get_endstate();
-        let mut current_snake = current_snake.clone();
+        let mut current_snake = current_snake;
         while !end_state.is_terminal() {
             board_copy.execute_random_move(&current_snake);
             end_state = board_copy.get_endstate();
