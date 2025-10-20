@@ -9,7 +9,7 @@ use crate::{
     config::MonteCarloConfig,
     models::{Battlesnake, Board},
     montecarlo::evaulator::RREvaulator,
-    utils::{self, dir_to_string},
+    utils::{self},
 };
 
 use super::node_state::NodeState;

@@ -15,6 +15,7 @@ use candle_nn::Optimizer;
 use candle_nn::VarBuilder;
 use candle_nn::VarMap;
 
+use crate::learning::simulation::DataLoader;
 use crate::learning::simulation::MoveLog;
 use crate::models::Board;
 use crate::models::Coord;
@@ -88,23 +89,12 @@ impl SimpleConv {
     // that the model is training at all.
     pub fn train(
         &self,
-        data: &Vec<MoveLog>,
+        data: &DataLoader,
     ) -> Result<(), candle_core::error::Error> {
-        let (training, validation) =
-            data.split_at(((data.len() as f64) * 0.7) as usize);
-
-        if training.len() <= 0 || validation.len() <= 0 {
-            panic!("Invalid training or validation length");
-        }
-
         let mut optimiser = AdamW::new_lr(self.var_map.all_vars(), 0.004)?;
         let mut epoch = 0;
-
-        let mut chunk_size = training.len() / 100;
-        if chunk_size <= 0 {
-            chunk_size = training.len();
-        }
-        for batch in training.chunks(chunk_size) {
+        let chunk_size = data.len();
+        for batch in data.read_in_chunks(chunk_size) {
             let boards = batch.iter().map(|l| return &l.board).collect();
             let batch_tensor =
                 NNEvaulator::generate_input_tensor_batch(&boards);
