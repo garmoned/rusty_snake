@@ -16,7 +16,6 @@ use candle_nn::VarBuilder;
 use candle_nn::VarMap;
 
 use crate::learning::simulation::DataLoader;
-use crate::learning::simulation::MoveLog;
 use crate::models::Board;
 use crate::models::Coord;
 use crate::montecarlo::evaulator::Evaluator;
@@ -40,7 +39,7 @@ pub struct SimpleConv {
 impl SimpleConv {
     pub fn new() -> Result<Self, candle_core::error::Error> {
         let var_map = VarMap::new();
-        let device = Device::Cpu;
+        let device = Device::new_cuda(0)?;
         // Input matrix size = |batch|x5x11x11.
         let vb = VarBuilder::from_varmap(&var_map, DType::F64, &device);
 
@@ -57,6 +56,13 @@ impl SimpleConv {
             var_map,
             device,
         });
+    }
+
+    pub fn load_weights(
+        &mut self,
+        path: &str,
+    ) -> Result<(), candle_core::error::Error> {
+        self.var_map.load(path)
     }
 
     fn forward(&self, x: Tensor) -> Result<Tensor, candle_core::error::Error> {
@@ -93,7 +99,7 @@ impl SimpleConv {
     ) -> Result<(), candle_core::error::Error> {
         let mut optimiser = AdamW::new_lr(self.var_map.all_vars(), 0.004)?;
         let mut epoch = 0;
-        let chunk_size = data.len();
+        let chunk_size = (data.len() / 100) + 1;
         for batch in data.read_in_chunks(chunk_size) {
             let boards = batch.iter().map(|l| return &l.board).collect();
             let batch_tensor =
@@ -128,6 +134,13 @@ impl NNEvaulator {
         return Ok(Self {
             model: SimpleConv::new()?,
         });
+    }
+
+    pub fn load_weights(
+        &mut self,
+        path: &str,
+    ) -> Result<(), candle_core::error::Error> {
+        self.model.load_weights(path)
     }
 
     // Takes in a single vector of points and encodes them into an 14x14

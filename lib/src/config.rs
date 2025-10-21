@@ -1,7 +1,14 @@
 #[derive(Clone)]
+pub enum Evaluator {
+    RANDOM,
+    NEURAL,
+}
+
+#[derive(Clone)]
 pub struct MonteCarloConfig {
     pub iterations: i64,
     pub max_duration: u64,
+    pub evaulator: Evaluator,
 }
 
 impl MonteCarloConfig {
@@ -17,6 +24,7 @@ impl MonteCarloConfig {
                 .unwrap_or("400".to_string())
                 .parse()
                 .unwrap_or(400),
+            evaulator: Evaluator::RANDOM,
         }
     }
 
@@ -24,6 +32,7 @@ impl MonteCarloConfig {
         Self {
             iterations: 6000,
             max_duration: 100, // In milliseconds.
+            evaulator: Evaluator::RANDOM,
         }
     }
 }

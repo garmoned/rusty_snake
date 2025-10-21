@@ -6,7 +6,7 @@ use snake_lib::{
 
 fn main() {
     let args = std::env::args().collect::<Vec<String>>();
-    if args.len() != 3 {
+    if args.len() != 4 {
         eprintln!("Usage: {} <batch_size> <batches> <run_mode>", args[0]);
         std::process::exit(1);
     }

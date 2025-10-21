@@ -8,7 +8,10 @@ use std::{
 use crate::{
     config::MonteCarloConfig,
     models::{Battlesnake, Board},
-    montecarlo::evaulator::RREvaulator,
+    montecarlo::{
+        evaulator::{Evaluator, RREvaulator},
+        nn_evaluator::NNEvaulator,
+    },
     utils::{self},
 };
 
@@ -64,7 +67,17 @@ impl Tree {
         utils::fix_snake_order(&mut starting_board, starting_snake);
         let snake_tracker = Rc::from(SnakeTracker::new(&starting_board));
         // This can now be potentially swapped out with a neural network evaluator.
-        let evaluator = Rc::from(RREvaulator::new(snake_tracker.clone()));
+        let evaluator = match config.evaulator {
+            crate::config::Evaluator::RANDOM => {
+                Rc::from(RREvaulator::new(snake_tracker.clone()))
+                    as Rc<dyn Evaluator>
+            }
+            crate::config::Evaluator::NEURAL => {
+                let mut nn = NNEvaulator::new().unwrap();
+                nn.load_weights("./data/models/basic.safetensor").unwrap();
+                Rc::from(nn) as Rc<dyn Evaluator>
+            }
+        };
         return Self {
             max_duration: config.max_duration,
             root: NodeState::new(

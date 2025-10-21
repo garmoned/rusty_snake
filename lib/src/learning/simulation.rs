@@ -1,8 +1,11 @@
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rocket::form::validate::Contains;
 use serde::{Deserialize, Serialize};
 use std::sync::mpsc::channel;
+use std::usize;
 use std::{collections::HashMap, fs};
 
+use crate::config::Evaluator;
 use crate::{
     config::MonteCarloConfig,
     models::Board,
@@ -69,7 +72,7 @@ impl BatchFileIterator {
 
     fn cur_file_path(&self) -> String {
         format!(
-            "{}/batch_{}_{}.json",
+            "{}batch_{}_{}.json",
             self.mem_path, self.batch_number, self.batch_index
         )
     }
@@ -79,8 +82,9 @@ impl Iterator for BatchFileIterator {
     type Item = String;
     fn next(&mut self) -> Option<Self::Item> {
         if std::fs::exists(self.cur_file_path()).unwrap() {
+            let f = Some(self.cur_file_path());
             self.batch_index += 1;
-            return Some(self.cur_file_path());
+            return f;
         }
         return None;
     }
@@ -96,7 +100,7 @@ impl FileIterator {
     }
     fn cur_file_path(&self) -> String {
         format!(
-            "{}/batch_{}_{}.json",
+            "{}batch_{}_{}.json",
             self.mem_path, self.batch_number, self.batch_index
         )
     }
@@ -106,15 +110,17 @@ impl Iterator for FileIterator {
     type Item = String;
     fn next(&mut self) -> Option<Self::Item> {
         if std::fs::exists(self.cur_file_path()).unwrap() {
+            let f = Some(self.cur_file_path());
             self.batch_index += 1;
-            return Some(self.cur_file_path());
+            return f;
         }
         // Check if we are at the next batch entirely.
         self.batch_index = 0;
         self.batch_number += 1;
         if std::fs::exists(self.cur_file_path()).unwrap() {
+            let f = Some(self.cur_file_path());
             self.batch_index += 1;
-            return Some(self.cur_file_path());
+            return f;
         }
         return None;
     }
@@ -135,6 +141,7 @@ impl Iterator for DataIterator {
             .by_ref()
             .take(self.chunk_size)
             .map(|f| {
+                println!("file path {}", f);
                 serde_json::from_str(&fs::read_to_string(f).unwrap()).unwrap()
             })
             .collect();
@@ -177,14 +184,21 @@ impl DataLoader {
     }
 
     pub fn len(&self) -> usize {
-        let mut file_count = 0;
-        for entry in fs::read_dir(&self.mem_path).unwrap() {
-            let entry = entry.unwrap();
-            if entry.metadata().unwrap().is_file() {
-                file_count += 1;
-            }
+        let files = fs::read_dir(&self.mem_path)
+            .unwrap()
+            .map(|e| e.unwrap())
+            .filter(|e| e.metadata().unwrap().is_file());
+        match self.readmode {
+            ReadMode::BATCH(batch_num) => files
+                .filter(|e| {
+                    e.file_name()
+                        .to_str()
+                        .unwrap()
+                        .contains(&format!("batch_{}_", batch_num))
+                })
+                .count(),
+            ReadMode::ALL => files.count(),
         }
-        return file_count;
     }
 
     fn write(
@@ -285,6 +299,15 @@ struct Agent {
 }
 
 impl Agent {
+    pub fn new_nn(snake: String) -> Self {
+        let mut config = MonteCarloConfig::default();
+        config.evaulator = Evaluator::NEURAL;
+        Self {
+            starting_snake_id: snake.clone(),
+            config: config,
+        }
+    }
+
     pub fn new(snake: String) -> Self {
         Self {
             starting_snake_id: snake.clone(),
@@ -317,6 +340,9 @@ pub enum RunMode {
     DryRun,
     // Runs using the saved data from a previous run.
     Offline,
+
+    // Runs the neural net montecarlo against a pure monte carlo.
+    BenchMark,
 }
 
 impl std::str::FromStr for RunMode {
@@ -326,6 +352,7 @@ impl std::str::FromStr for RunMode {
             "train" => Ok(RunMode::Train),
             "dry_run" => Ok(RunMode::DryRun),
             "offline" => Ok(RunMode::Offline),
+            "bench_mark" => Ok(RunMode::BenchMark),
             _ => Err(format!("Invalid RunMode: {}", s)),
         }
     }
@@ -367,9 +394,22 @@ pub struct Trainer {
 impl Trainer {
     pub fn new(board: &Board, config: TrainerConfig) -> Self {
         let mut agent = vec![];
-        for snake in &board.snakes {
-            agent.push(Agent::new(snake.id.clone()));
+
+        if config.run_mode == RunMode::BenchMark {
+            for (i, snake) in board.snakes.iter().enumerate() {
+                // Make the first agent use the neural net.
+                if i == 0 {
+                    agent.push(Agent::new_nn(snake.id.clone()));
+                } else {
+                    agent.push(Agent::new(snake.id.clone()));
+                }
+            }
+        } else {
+            for snake in &board.snakes {
+                agent.push(Agent::new(snake.id.clone()));
+            }
         }
+
         Self {
             agents: agent,
             move_logger: MoveLogger::new(),
@@ -381,11 +421,25 @@ impl Trainer {
     }
 
     fn train(&mut self) {
-        if self.config.run_mode == RunMode::DryRun {
+        if self.config.run_mode == RunMode::DryRun
+            || self.config.run_mode == RunMode::BenchMark
+        {
             println!("Skipping model training, in dryrun mode");
         }
+
+        // If we are training offline, use all of the accumulated training data.
+        if self.config.run_mode == RunMode::Offline {
+            self.move_logger.data_loader.set_readmode(ReadMode::ALL);
+        }
+
+        // In training mode, only train off of the most recently generated batch.
+        if self.config.run_mode == RunMode::Train {
+            self.move_logger.data_loader.set_readmode(ReadMode::BATCH(
+                self.move_logger.batch_number - 1,
+            ));
+        }
+
         self.model.train(&self.move_logger.data_loader).unwrap();
-        // Clear out all of the data after training.
         println!("Training run finished");
         let r = self.model.save("./data/models/basic.safetensor");
         match r {
@@ -437,15 +491,34 @@ impl Trainer {
         for logs in reciever.into_iter() {
             self.move_logger.merge(&logs);
         }
+        println!(
+            "Finished playing batch {} with {} games played",
+            self.move_logger.batch_number, self.move_logger.games_played
+        );
         self.move_logger.dump_batch();
     }
 
-    pub fn run(&mut self) {
+    pub fn online_train(&mut self) {
         for _ in 0..self.config.batches {
             self.play_batch();
             // Train on the move data collected during the batch.
             self.train();
         }
+    }
+
+    pub fn bench_mark(&mut self) {
+        for _ in 0..self.config.batches {
+            self.play_batch();
+        }
         self.move_logger.print_stats();
+    }
+
+    pub fn run(&mut self) {
+        match self.config.run_mode {
+            RunMode::Train => self.online_train(),
+            RunMode::DryRun => self.online_train(),
+            RunMode::Offline => self.train(),
+            RunMode::BenchMark => self.bench_mark(),
+        }
     }
 }
