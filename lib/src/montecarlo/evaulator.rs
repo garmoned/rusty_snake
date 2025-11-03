@@ -1,12 +1,29 @@
 use std::rc::Rc;
 
+use serde::{Deserialize, Serialize};
+
 use crate::{models::Board, montecarlo::tree::SnakeTracker};
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct MovePolicy {
+    // Direction to be moved.
+    pub dir: (i32, i32),
+    // The probability that this move should be taken.
+    pub p: f64,
+}
 
 // Evaluates who will win from a given board state.
 pub trait Evaluator {
     // Given a board state and id of player about to move
     // predicts the most likely winner of the game.
     fn predict_winner(&self, board: &Board, current_snake: &str) -> String;
+
+    // Predicts the best moves to be played by the player about to move.
+    fn predict_best_moves(
+        &self,
+        board: &Board,
+        current_snake: &str,
+    ) -> Vec<MovePolicy>;
 }
 
 // An evaulator which makes random moves to decide the winner.
@@ -40,5 +57,9 @@ impl Evaluator for RREvaulator {
                 panic!("somehow the end state ended with playing")
             }
         }
+    }
+
+    fn predict_best_moves(&self, _: &Board, _: &str) -> Vec<MovePolicy> {
+        panic!("Unimplemented for random moves");
     }
 }

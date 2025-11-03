@@ -1,17 +1,19 @@
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rocket::shield::Policy;
 use serde::{Deserialize, Serialize};
 use std::sync::mpsc::channel;
 use std::usize;
 use std::{collections::HashMap, fs};
 
 use crate::config::Evaluator;
+use crate::montecarlo::evaulator::MovePolicy;
 use crate::{
     config::MonteCarloConfig,
     models::Board,
     montecarlo::{nn_evaluator::SimpleConv, tree::Tree},
 };
 
-#[derive(Deserialize, Serialize, Debug, Clone, Hash)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct MoveLog {
     // The player who just made the move.
     pub player: String,
@@ -19,6 +21,8 @@ pub struct MoveLog {
     pub board: Board,
     // The player who won from this board state.
     pub winner: String,
+    // Calculated policy prediction for each move.
+    pub policy: Vec<MovePolicy>,
 }
 
 impl MoveLog {
@@ -264,11 +268,17 @@ impl MoveLogger {
         }
     }
 
-    pub fn log_move(&mut self, player: &str, board: &Board) {
+    pub fn log_move(
+        &mut self,
+        player: &str,
+        board: &Board,
+        policy: Vec<MovePolicy>,
+    ) {
         self.current_game.push(MoveLog {
             player: player.to_string(),
             board: board.clone(),
             winner: "".to_string(),
+            policy: policy,
         });
     }
 
@@ -338,6 +348,19 @@ impl Agent {
             starting_snake.clone(),
         );
         tree.get_best_move()
+    }
+
+    pub fn get_best_move_with_policy(
+        &self,
+        board: Board,
+    ) -> ((i32, i32), Vec<MovePolicy>) {
+        let starting_snake = board.get_snake(&self.starting_snake_id);
+        let mut tree = Tree::new(
+            self.config.clone(),
+            board.clone(),
+            starting_snake.clone(),
+        );
+        tree.get_best_move_with_policy()
     }
 
     pub fn id(&self) -> &str {
@@ -479,10 +502,10 @@ impl Trainer {
             for i in 0..self.agents.len() {
                 let agent = &self.agents[i];
                 let is_last = i == self.agents.len() - 1;
-                let dir = agent.get_move(board.clone());
-                state = board.execute(agent.id(), dir, is_last);
+                let move_p = agent.get_best_move_with_policy(board.clone());
+                state = board.execute(agent.id(), move_p.0, is_last);
                 // Log the player made the move.
-                move_logger.log_move(agent.id(), &board);
+                move_logger.log_move(agent.id(), &board, move_p.1);
             }
         }
         match state {

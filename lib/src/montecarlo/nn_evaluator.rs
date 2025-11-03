@@ -45,13 +45,20 @@ impl SimpleConv {
         let vb = VarBuilder::from_varmap(&var_map, DType::F64, &device);
 
         let cv1 =
-            conv2d_no_bias(5, 32, 3, Conv2dConfig::default(), vb.pp("cv1"))?;
+            conv2d_no_bias(5, 256, 3, Conv2dConfig::default(), vb.pp("cv1"))?;
         let cv2 =
-            conv2d_no_bias(32, 64, 3, Conv2dConfig::default(), vb.pp("cv2"))?;
+            conv2d_no_bias(256, 64, 3, Conv2dConfig::default(), vb.pp("cv2"))?;
 
         // Output matrix size 6400 = |batch|x64x(14-4)x(14-4);
         let ln1 = linear(6400, 200, vb.pp("ln1"))?;
-        let ln2 = linear(200, 2, vb.pp("ln2"))?;
+
+        // The out dimensions correspond to -
+        //
+        // Value - winning chance for the player which just moved.
+        //
+        // The policy - The 4 priors of each direction [UP, DOWN, LEFT, RIGHT]
+        //
+        let ln2 = linear(200, 5, vb.pp("ln2"))?;
         return Ok(Self {
             cv1,
             cv2,
@@ -230,6 +237,14 @@ impl Evaluator for NNEvaulator {
             }
         }
         return board.snakes[max_idx].id.clone();
+    }
+
+    fn predict_best_moves(
+        &self,
+        _: &Board,
+        _: &str,
+    ) -> Vec<super::evaulator::MovePolicy> {
+        panic!("Unimplemented")
     }
 }
 
