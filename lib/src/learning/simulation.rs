@@ -1,5 +1,4 @@
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use rocket::form::validate::Contains;
 use serde::{Deserialize, Serialize};
 use std::sync::mpsc::channel;
 use std::usize;
@@ -183,6 +182,23 @@ impl DataLoader {
         }
     }
 
+    pub fn clear_batch(&self) {
+        let files = fs::read_dir(&self.mem_path)
+            .unwrap()
+            .map(|e| e.unwrap())
+            .filter(|e| e.metadata().unwrap().is_file());
+        for f in files {
+            let err = fs::remove_file(f.path());
+            if !err.is_ok() {
+                println!(
+                    "Error while deleting file {:?} , {:?}",
+                    f.path(),
+                    err.err()
+                )
+            }
+        }
+    }
+
     pub fn len(&self) -> usize {
         let files = fs::read_dir(&self.mem_path)
             .unwrap()
@@ -240,7 +256,6 @@ impl MoveLogger {
     pub fn merge(&mut self, other: &MoveLogger) {
         self.current_batch.extend(other.current_batch.clone());
         self.current_game.extend(other.current_game.clone());
-        self.winners.extend(other.winners.clone());
         self.games_played += other.games_played;
 
         for (winner, times) in &other.winners {
@@ -290,6 +305,7 @@ impl MoveLogger {
     pub fn clear_all(&mut self) {
         self.current_batch.clear();
         self.current_game.clear();
+        self.data_loader.clear_batch();
     }
 }
 
@@ -399,14 +415,19 @@ impl Trainer {
             for (i, snake) in board.snakes.iter().enumerate() {
                 // Make the first agent use the neural net.
                 if i == 0 {
+                    println!(
+                        "Snake with id {} using neural network",
+                        snake.id.clone()
+                    );
                     agent.push(Agent::new_nn(snake.id.clone()));
                 } else {
                     agent.push(Agent::new(snake.id.clone()));
                 }
             }
         } else {
+            // When training run with a full neural network for self play on both sides.
             for snake in &board.snakes {
-                agent.push(Agent::new(snake.id.clone()));
+                agent.push(Agent::new_nn(snake.id.clone()));
             }
         }
 

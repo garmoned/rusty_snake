@@ -74,7 +74,11 @@ impl Tree {
             }
             crate::config::Evaluator::NEURAL => {
                 let mut nn = NNEvaulator::new().unwrap();
-                nn.load_weights("./data/models/basic.safetensor").unwrap();
+                let weight_path =
+                    std::path::Path::new("./data/models/basic.safetensor");
+                if weight_path.exists() {
+                    nn.load_weights(weight_path.to_str().unwrap()).unwrap();
+                }
                 Rc::from(nn) as Rc<dyn Evaluator>
             }
         };

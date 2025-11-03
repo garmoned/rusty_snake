@@ -26,6 +26,7 @@ const BOARD_SIZE: usize = 14;
 
 pub struct SimpleConv {
     cv1: Conv2d,
+    cv2: Conv2d,
     ln1: Linear,
     ln2: Linear,
 
@@ -44,13 +45,16 @@ impl SimpleConv {
         let vb = VarBuilder::from_varmap(&var_map, DType::F64, &device);
 
         let cv1 =
-            conv2d_no_bias(5, 32, 5, Conv2dConfig::default(), vb.pp("cv1"))?;
+            conv2d_no_bias(5, 32, 3, Conv2dConfig::default(), vb.pp("cv1"))?;
+        let cv2 =
+            conv2d_no_bias(32, 64, 3, Conv2dConfig::default(), vb.pp("cv2"))?;
 
-        // Output matrix size 2592 = |batch|x32x(14-5)x(14-5);
-        let ln1 = linear(3200, 200, vb.pp("ln1"))?;
+        // Output matrix size 6400 = |batch|x64x(14-4)x(14-4);
+        let ln1 = linear(6400, 200, vb.pp("ln1"))?;
         let ln2 = linear(200, 2, vb.pp("ln2"))?;
         return Ok(Self {
             cv1,
+            cv2,
             ln1,
             ln2,
             var_map,
@@ -67,6 +71,7 @@ impl SimpleConv {
 
     fn forward(&self, x: Tensor) -> Result<Tensor, candle_core::error::Error> {
         let x = self.cv1.forward(&x)?;
+        let x = self.cv2.forward(&x)?;
         println!("Cv1 output shape {:?}", x);
         // Flatten everything but the batch dimension.
         let x = x.flatten(1, x.dims().len() - 1)?;
@@ -97,7 +102,7 @@ impl SimpleConv {
         &self,
         data: &DataLoader,
     ) -> Result<(), candle_core::error::Error> {
-        let mut optimiser = AdamW::new_lr(self.var_map.all_vars(), 0.004)?;
+        let mut optimiser = AdamW::new_lr(self.var_map.all_vars(), 0.001)?;
         let mut epoch = 0;
         let chunk_size = (data.len() / 100) + 1;
         for batch in data.read_in_chunks(chunk_size) {
