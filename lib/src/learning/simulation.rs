@@ -6,13 +6,14 @@ use std::usize;
 use std::{collections::HashMap, fs};
 
 use crate::config::Evaluator;
+use crate::montecarlo::evaulator::MovePolicy;
 use crate::{
     config::MonteCarloConfig,
     models::Board,
-    montecarlo::{nn_evaluator::SimpleConv, tree::Tree},
+    montecarlo::{nn_evaluator::MultiOutputModel, tree::Tree},
 };
 
-#[derive(Deserialize, Serialize, Debug, Clone, Hash)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct MoveLog {
     // The player who just made the move.
     pub player: String,
@@ -20,6 +21,8 @@ pub struct MoveLog {
     pub board: Board,
     // The player who won from this board state.
     pub winner: String,
+    // Calculated policy prediction for each move.
+    pub policy: Vec<MovePolicy>,
 }
 pub enum Dir {
     RIGHT,
@@ -29,15 +32,15 @@ pub enum Dir {
 }
 
 impl MoveLog {
-    // Returns a one hot encoded winner based
-    // on the order of the snakes in the board state.
-    pub fn get_winner_index(&self) -> u32 {
+    // Returns the index of the winner if found, otherwise None.
+    pub fn get_winner_index(&self) -> Option<u32> {
         for (idx, bs) in self.board.snakes.iter().enumerate() {
             if bs.id == self.winner {
-                return idx as u32;
+                return Some(idx as u32);
             }
         }
-        return 0;
+        // If the winner is not found, return None.
+        return None;
     }
 
     fn find_policy(&self, dir: (i32, i32)) -> f64 {
@@ -117,11 +120,17 @@ impl MoveLogger {
         }
     }
 
-    pub fn log_move(&mut self, player: &str, board: &Board) {
+    pub fn log_move(
+        &mut self,
+        player: &str,
+        board: &Board,
+        policy: Vec<MovePolicy>,
+    ) {
         self.current_game.push(MoveLog {
             player: player.to_string(),
             board: board.clone(),
             winner: "".to_string(),
+            policy: policy,
         });
     }
 
@@ -192,6 +201,19 @@ impl Agent {
         tree.get_best_move()
     }
 
+    pub fn get_best_move_with_policy(
+        &self,
+        board: Board,
+    ) -> ((i32, i32), Vec<MovePolicy>) {
+        let starting_snake = board.get_snake(&self.starting_snake_id);
+        let mut tree = Tree::new(
+            self.config.clone(),
+            board.clone(),
+            starting_snake.clone(),
+        );
+        tree.get_best_move_with_policy()
+    }
+
     pub fn id(&self) -> &str {
         return &self.starting_snake_id;
     }
@@ -256,7 +278,7 @@ pub struct Trainer {
     // The network to train.
     //
     // This should be an interface so we can train different models.
-    model: SimpleConv,
+    model: MultiOutputModel,
 }
 
 impl Trainer {
@@ -289,7 +311,7 @@ impl Trainer {
             config: config,
             init_board: board.clone(),
             // We should clean up these unwraps.
-            model: SimpleConv::new().unwrap(),
+            model: MultiOutputModel::new().unwrap(),
         }
     }
 
@@ -301,7 +323,7 @@ impl Trainer {
         }
         self.model.train(&self.move_logger.current_batch).unwrap();
         println!("Training run finished");
-        let r = self.model.save("./data/models/basic.safetensor");
+        let r = self.model.save_weights("./data/models/basic.safetensor");
         match r {
             Ok(_) => println!("Model saved successfully"),
             Err(err) => {
@@ -318,10 +340,10 @@ impl Trainer {
             for i in 0..self.agents.len() {
                 let agent = &self.agents[i];
                 let is_last = i == self.agents.len() - 1;
-                let dir = agent.get_move(board.clone());
-                state = board.execute(agent.id(), dir, is_last);
+                let move_p = agent.get_best_move_with_policy(board.clone());
+                state = board.execute(agent.id(), move_p.0, is_last);
                 // Log the player made the move.
-                move_logger.log_move(agent.id(), &board);
+                move_logger.log_move(agent.id(), &board, move_p.1);
                 // Every 10 moves or so throw a food in.
                 if random::<i32>() % 10 == 0 {
                     board.add_food();

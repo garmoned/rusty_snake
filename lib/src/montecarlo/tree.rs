@@ -9,7 +9,7 @@ use crate::{
     config::MonteCarloConfig,
     models::{Battlesnake, Board},
     montecarlo::{
-        evaulator::{Evaluator, RREvaulator},
+        evaulator::{Evaluator, MovePolicy, RREvaulator},
         nn_evaluator::NNEvaulator,
     },
     utils::{self},
@@ -119,10 +119,13 @@ impl Tree {
         return self.get_best_move_with_start_time(Instant::now());
     }
 
-    pub fn get_best_move_with_start_time(
+    pub fn get_best_move_with_policy(
         &mut self,
-        start: Instant,
-    ) -> (i32, i32) {
+    ) -> ((i32, i32), Vec<MovePolicy>) {
+        return self.move_with_policy_at_time(Instant::now());
+    }
+
+    pub fn move_policy(&mut self, start: Instant) -> Vec<MovePolicy> {
         let max_duration = Duration::from_millis(self.max_duration);
         self.root.expand();
         loop {
@@ -132,14 +135,49 @@ impl Tree {
                 break;
             }
         }
-        let best_child =
-            self.root.children.iter().max_by(|x, y| x.sims.cmp(&y.sims));
+        let t_sims = self.root.sims as f64;
+        let mut policy = vec![];
+        for node in &self.root.children {
+            policy.push(MovePolicy {
+                dir: node.taken_dir,
+                // Normalize all of the probabilities.
+                p: node.sims() / t_sims,
+            });
+        }
+        return policy;
+    }
+
+    pub fn move_with_policy_at_time(
+        &mut self,
+        start: Instant,
+    ) -> ((i32, i32), Vec<MovePolicy>) {
+        let policy = self.move_policy(start);
+        let best_move = policy
+            .clone()
+            .into_iter()
+            .max_by(|x, y| x.p.total_cmp(&y.p));
+
+        if best_move.is_none() {
+            return ((1, 0), policy);
+        }
+        let best_child = best_move.unwrap();
+        return (best_child.dir, policy);
+    }
+
+    pub fn get_best_move_with_start_time(
+        &mut self,
+        start: Instant,
+    ) -> (i32, i32) {
+        let best_child = self
+            .move_policy(start)
+            .into_iter()
+            .max_by(|x, y| x.p.total_cmp(&y.p));
 
         if best_child.is_none() {
             return (1, 0);
         }
         let best_child = best_child.unwrap();
-        return best_child.taken_dir;
+        return best_child.dir;
     }
 }
 

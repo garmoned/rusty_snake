@@ -1,4 +1,6 @@
 use core::f64;
+use std::ops::Deref;
+use std::rc::Rc;
 
 use candle_core::error;
 use candle_core::DType;
@@ -15,7 +17,6 @@ use candle_nn::Optimizer;
 use candle_nn::VarBuilder;
 use candle_nn::VarMap;
 
-use crate::learning::simulation::DataLoader;
 use crate::learning::simulation::Dir;
 use crate::learning::simulation::MoveLog;
 use crate::models::Board;
@@ -27,20 +28,38 @@ use crate::utils;
 // This includes the 11x11 board plus the 2 extra rows and columns for the walls.
 const BOARD_SIZE: usize = 14;
 
-pub struct SimpleConv {
+trait ModelUnit {
+    fn forward(
+        &self,
+        x: Tensor,
+        common_model: &CommonModel,
+    ) -> Result<Tensor, candle_core::error::Error>;
+    fn label_batch(&self, logs: &[MoveLog]) -> Tensor;
+    fn loss_fn(
+        &self,
+        inference: &Tensor,
+        targets: &Tensor,
+    ) -> Result<Tensor, candle_core::error::Error>;
+    fn train(
+        &self,
+        data: &Vec<MoveLog>,
+        common_model: &CommonModel,
+    ) -> Result<(), candle_core::error::Error>;
+}
+
+pub struct CommonModel {
     cv1: Conv2d,
     cv2: Conv2d,
     ln1: Linear,
-    ln2: Linear,
 
-    // Stores parameters for inference and training like loss.
-    var_map: VarMap,
+    pub pn: Linear,
+    pub vn: Linear,
 
-    // Device the model is loaded onto.
+    pub var_map: VarMap,
     pub device: Device,
 }
 
-impl SimpleConv {
+impl CommonModel {
     pub fn new() -> Result<Self, candle_core::error::Error> {
         let var_map = VarMap::new();
         let device = Device::new_cuda(0)?;
@@ -48,28 +67,33 @@ impl SimpleConv {
         let vb = VarBuilder::from_varmap(&var_map, DType::F64, &device);
 
         let cv1 =
-            conv2d_no_bias(5, 32, 3, Conv2dConfig::default(), vb.pp("cv1"))?;
+            conv2d_no_bias(5, 256, 3, Conv2dConfig::default(), vb.pp("cv1"))?;
         let cv2 =
-            conv2d_no_bias(32, 64, 3, Conv2dConfig::default(), vb.pp("cv2"))?;
+            conv2d_no_bias(256, 64, 3, Conv2dConfig::default(), vb.pp("cv2"))?;
 
         // Output matrix size 6400 = |batch|x64x(14-4)x(14-4);
         let ln1 = linear(6400, 200, vb.pp("ln1"))?;
-
         // The out dimensions correspond to -
         //
-        // Value - 2 [First player win chance, Second player win chance].
+        // The policy - The 4 priors of each direction [UP, DOWN, LEFT, RIGHT]
         //
-        // The policy - The 4 priors of each direction [UP, DOWN, LEFT, RIGHT].
+        let pn = linear(200, 4, vb.pp("pn"))?;
+
+        // The value output head
         //
-        let ln2 = linear(200, 6, vb.pp("ln2"))?;
-        return Ok(Self {
+        // Outputs a single value predicting the chance that the snake idx = 0
+        // will win.
+        //
+        let vn = linear(200, 1, vb.pp("vn"))?;
+        Ok(Self {
             cv1,
             cv2,
             ln1,
-            ln2,
+            pn,
+            vn,
             var_map,
             device,
-        });
+        })
     }
 
     pub fn load_weights(
@@ -79,80 +103,225 @@ impl SimpleConv {
         self.var_map.load(path)
     }
 
-    fn forward(&self, x: Tensor) -> Result<Tensor, candle_core::error::Error> {
+    pub fn save_weights(
+        &self,
+        path: &str,
+    ) -> Result<(), candle_core::error::Error> {
+        self.var_map.save(path)
+    }
+
+    fn common_forward(
+        &self,
+        x: Tensor,
+    ) -> Result<Tensor, candle_core::error::Error> {
         let x = self.cv1.forward(&x)?;
         let x = self.cv2.forward(&x)?;
         // Flatten everything but the batch dimension.
         let x = x.flatten(1, x.dims().len() - 1)?;
         let x = x.relu()?;
         let x = self.ln1.forward(&x)?.relu()?;
-
-        // This will now be a batchx6x1 matrix.
-        let x = self.ln2.forward(&x)?;
-        return Ok(x);
+        Ok(x)
     }
 
-    fn log_to_label(&self, log: &MoveLog) -> Tensor {
-        let mut vec = vec![0.0; 6];
-
-        // Set the winner within the first two indices.
-        let windex = log.get_winner_index() as usize;
-        vec[windex] = 1.0;
-
-        vec[2] = log.policy_prior(Dir::UP);
-        vec[3] = log.policy_prior(Dir::DOWN);
-        vec[4] = log.policy_prior(Dir::LEFT);
-        vec[5] = log.policy_prior(Dir::RIGHT);
-
-        let dim = vec.len();
-        return Tensor::from_vec(vec, dim, &self.device).unwrap();
-    }
-
-    fn batch_log_to_label(&self, logs: &Vec<MoveLog>) -> Tensor {
-        let tensors: Vec<Tensor> =
-            logs.iter().map(|l| self.log_to_label(l)).collect();
-        Tensor::stack(&tensors, 0).unwrap()
-    }
-
-    pub fn save(&self, path: &str) -> Result<(), error::Error> {
-        self.var_map.save(path)
-    }
-
-    // Make this less tightly coupled.
-    //
-    // Lets assume this is a large amount of moves around 10,000.
-    //
-    // We will split it into training and validation so we can verify
-    // that the model is training at all.
-    pub fn train(
+    fn train(
         &self,
         data: &Vec<MoveLog>,
+        unit: &dyn ModelUnit,
     ) -> Result<(), candle_core::error::Error> {
         println!("Training on batch size {} ", data.len());
         let mut optimiser = AdamW::new_lr(self.var_map.all_vars(), 0.0001)?;
-        let mut epoch = 0;
         let chunk_size = (data.len() / 100) + 1;
         println!("Training on breaking batch into chunks of {} ", chunk_size);
-
         for batch in data.chunks(chunk_size) {
             let boards = batch.iter().map(|l| return &l.board).collect();
             let batch_tensor =
                 NNEvaulator::generate_input_tensor_batch(&boards);
             let batch_tensor = batch_tensor.to_device(&self.device)?;
 
-            let inference = self.forward(batch_tensor)?;
+            let inference = unit.forward(batch_tensor, &self)?;
             println!("Inference tensor {:?}", inference);
-            let targets = self.batch_log_to_label(&batch);
+            let targets = unit.label_batch(&batch);
             println!("Target tensor {:?}", targets);
-            let loss = candle_nn::loss::binary_cross_entropy_with_logit(
-                &inference, &targets,
-            )?;
+            let loss = unit.loss_fn(&inference, &targets)?;
             println!("Caltulated loss");
             optimiser.backward_step(&loss)?;
-            println!("Epoch: {epoch}, Loss: {:?}", loss.to_vec0::<f64>()?);
-            epoch += 1;
         }
+        Ok(())
+    }
+}
 
+pub struct PolicyUnit {
+    device: Device,
+}
+
+impl PolicyUnit {
+    pub fn new(device: Device) -> Self {
+        Self { device }
+    }
+
+    fn label_fn(&self, log: &MoveLog) -> Tensor {
+        let mut vec = vec![0.0; 4];
+        vec[0] = log.policy_prior(Dir::UP);
+        vec[1] = log.policy_prior(Dir::DOWN);
+        vec[2] = log.policy_prior(Dir::LEFT);
+        vec[3] = log.policy_prior(Dir::RIGHT);
+        Tensor::from_vec(vec, 4, &self.device).unwrap()
+    }
+}
+
+pub struct ValueUnit {
+    device: Device,
+}
+
+impl ValueUnit {
+    fn label_fn(&self, log: &MoveLog) -> Tensor {
+        let mut vec = vec![0.0; 1];
+        match log.get_winner_index() {
+            Some(idx) => {
+                // If the winner is the first snake, set the value to 1.0.
+                if idx == 0 {
+                    vec[0] = 1.0;
+                } else {
+                    // If the winner is not the first snake, set the value to -1.0.
+                    vec[0] = -1.0;
+                }
+            }
+            None => {
+                // Ties are set to 0.0.
+                vec[0] = 0.0;
+            }
+        }
+        Tensor::from_vec(vec, 1, &self.device).unwrap()
+    }
+    pub fn new(device: Device) -> Self {
+        Self { device }
+    }
+}
+
+impl ModelUnit for PolicyUnit {
+    fn forward(
+        &self,
+        x: Tensor,
+        common_model: &CommonModel,
+    ) -> Result<Tensor, candle_core::error::Error> {
+        let x = common_model.common_forward(x)?;
+        let x = common_model.pn.forward(&x)?;
+
+        // Apply softmax so that all outcomes are scaled to sum to 1.
+        let x = candle_nn::ops::softmax(&x, 1)?;
+        Ok(x)
+    }
+
+    fn label_batch(&self, logs: &[MoveLog]) -> Tensor {
+        let mut tensors = vec![];
+        for log in logs {
+            tensors.push(self.label_fn(log));
+        }
+        Tensor::stack(&tensors, 0).unwrap()
+    }
+
+    fn loss_fn(
+        &self,
+        inference: &Tensor,
+        targets: &Tensor,
+    ) -> Result<Tensor, candle_core::error::Error> {
+        candle_nn::loss::binary_cross_entropy_with_logit(inference, targets)
+    }
+    fn train(
+        &self,
+        data: &Vec<MoveLog>,
+        common_model: &CommonModel,
+    ) -> Result<(), candle_core::error::Error> {
+        common_model.train(data, self)
+    }
+}
+
+impl ModelUnit for ValueUnit {
+    fn forward(
+        &self,
+        x: Tensor,
+        common_model: &CommonModel,
+    ) -> Result<Tensor, candle_core::error::Error> {
+        let x = common_model.common_forward(x)?;
+        let x = common_model.vn.forward(&x)?;
+        // Apply tanh so that the value will fall between [-1,1]
+        let x = x.tanh()?;
+        Ok(x)
+    }
+
+    fn label_batch(&self, logs: &[MoveLog]) -> Tensor {
+        let mut tensors = vec![];
+        for log in logs {
+            tensors.push(self.label_fn(log));
+        }
+        Tensor::stack(&tensors, 0).unwrap()
+    }
+    fn loss_fn(
+        &self,
+        inference: &Tensor,
+        targets: &Tensor,
+    ) -> Result<Tensor, candle_core::error::Error> {
+        candle_nn::loss::mse(inference, targets)
+    }
+    fn train(
+        &self,
+        data: &Vec<MoveLog>,
+        common_model: &CommonModel,
+    ) -> Result<(), candle_core::error::Error> {
+        common_model.train(data, self)
+    }
+}
+
+pub struct MultiOutputModel {
+    common: CommonModel,
+    policy_unit: PolicyUnit,
+    value_unit: ValueUnit,
+}
+impl MultiOutputModel {
+    pub fn new() -> Result<Self, error::Error> {
+        let common = CommonModel::new()?;
+        let policy_unit = PolicyUnit::new(common.device.clone());
+        let value_unit = ValueUnit::new(common.device.clone());
+        Ok(Self {
+            common: common,
+            policy_unit: policy_unit,
+            value_unit: value_unit,
+        })
+    }
+    pub fn load_weights(
+        &mut self,
+        path: &str,
+    ) -> Result<(), candle_core::error::Error> {
+        self.common.load_weights(path)
+    }
+    pub fn save_weights(
+        &self,
+        path: &str,
+    ) -> Result<(), candle_core::error::Error> {
+        self.common.save_weights(path)
+    }
+
+    pub fn policy_forward(
+        &self,
+        x: Tensor,
+    ) -> Result<Tensor, candle_core::error::Error> {
+        self.policy_unit.forward(x, &self.common)
+    }
+
+    pub fn value_forward(
+        &self,
+        x: Tensor,
+    ) -> Result<Tensor, candle_core::error::Error> {
+        self.value_unit.forward(x, &self.common)
+    }
+
+    pub fn train(
+        &self,
+        data: &Vec<MoveLog>,
+    ) -> Result<(), candle_core::error::Error> {
+        // Should eventually parallelize this but right now traning is not a bottleneck.
+        self.policy_unit.train(data, &self.common)?;
+        self.value_unit.train(data, &self.common)?;
         Ok(())
     }
 }
@@ -160,13 +329,13 @@ impl SimpleConv {
 // Uses a neural network to determine the winner from a
 // given board state.
 pub struct NNEvaulator {
-    model: SimpleConv,
+    model: MultiOutputModel,
 }
 
 impl NNEvaulator {
     pub fn new() -> Result<Self, error::Error> {
         return Ok(Self {
-            model: SimpleConv::new()?,
+            model: MultiOutputModel::new()?,
         });
     }
 
@@ -232,68 +401,51 @@ impl NNEvaulator {
         }
         return Tensor::stack(&tensors, 0).unwrap();
     }
-
-    fn generate_output(&self, board: &Board, current_snake: &str) -> Vec<f64> {
-        let starter_snake = board.get_snake(current_snake);
-        let mut board = board.clone();
-        utils::fix_snake_order(&mut board, starter_snake.clone());
-
-        let boards = vec![&board];
-
-        let input_tensor = NNEvaulator::generate_input_tensor_batch(&boards);
-        let input_tensor = input_tensor.to_device(&self.model.device).unwrap();
-        let output = self.model.forward(input_tensor).unwrap();
-        let output = output.flatten(0, output.dims().len() - 1).unwrap();
-        output.to_vec1::<f64>().unwrap()
-    }
 }
 
 impl Evaluator for NNEvaulator {
-    fn predict_winner(&self, board: &Board, current_snake: &str) -> String {
-        let output = self.generate_output(board, current_snake);
-        let mut max_idx = 0;
-        let mut max_v = 0.0;
-        for (idx, v) in output.iter().enumerate() {
-            // Only the first 2 indices are used for predicting winner.
-            if idx > 1 {
-                break;
-            }
-            if v > &max_v {
-                max_idx = idx;
-                max_v = *v;
-            }
+    fn predict_winner(&self, board: &Board, _: &str) -> String {
+        let input = NNEvaulator::generate_input_tensor_batch(&vec![board])
+            .to_device(&self.model.common.device)
+            .unwrap();
+
+        // Output is in the format batch X value.
+        let output = self.model.value_forward(input).unwrap();
+        let output = output.squeeze(0).unwrap();
+        let output = output.to_vec1::<f64>().unwrap()[0];
+        if output > 0.1 {
+            return board.snakes[0].id.clone();
         }
-        return board.snakes[max_idx].id.clone();
+        if output < -0.1 {
+            return board.snakes[1].id.clone();
+        } else {
+            return "tie".to_string();
+        }
     }
 
     fn predict_best_moves(
         &self,
         board: &Board,
-        current_snake: &str,
+        _: &str,
     ) -> Vec<super::evaulator::MovePolicy> {
-        let output = self.generate_output(board, current_snake);
-        let mut vec = vec![];
-        // UP
-        vec.push(MovePolicy {
-            dir: (1, 0),
-            p: output[2],
-        });
-        // DOWN
-        vec.push(MovePolicy {
-            dir: (-1, 0),
-            p: output[3],
-        });
-        // LEFT
-        vec.push(MovePolicy {
-            dir: (0, -1),
-            p: output[4],
-        });
-        // RIGHT
-        vec.push(MovePolicy {
-            dir: (0, 1),
-            p: output[5],
-        });
-        vec
+        let input = NNEvaulator::generate_input_tensor_batch(&vec![board])
+            .to_device(&self.model.common.device)
+            .unwrap();
+        let output = self
+            .model
+            .policy_forward(input)
+            .unwrap()
+            .squeeze(0)
+            .unwrap();
+        let output = output.to_vec1::<f64>().unwrap();
+        let mut policies = vec![];
+        for (idx, v) in output.iter().enumerate() {
+            policies.push(MovePolicy {
+                dir: utils::DIRECTIONS[idx as usize],
+                p: *v,
+            });
+        }
+        policies
     }
 }
 
