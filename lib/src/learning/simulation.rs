@@ -1,5 +1,4 @@
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use rocket::shield::Policy;
 use serde::{Deserialize, Serialize};
 use std::sync::mpsc::channel;
 use std::usize;
@@ -24,6 +23,12 @@ pub struct MoveLog {
     // Calculated policy prediction for each move.
     pub policy: Vec<MovePolicy>,
 }
+pub enum Dir {
+    RIGHT,
+    LEFT,
+    UP,
+    DOWN,
+}
 
 impl MoveLog {
     // Returns a one hot encoded winner based
@@ -35,6 +40,24 @@ impl MoveLog {
             }
         }
         return 0;
+    }
+
+    fn find_policy(&self, dir: (i32, i32)) -> f64 {
+        for pdir in &self.policy {
+            if pdir.dir == dir {
+                return pdir.p;
+            }
+        }
+        return 0.0;
+    }
+
+    pub fn policy_prior(&self, dir: Dir) -> f64 {
+        match dir {
+            Dir::RIGHT => self.find_policy((0, 1)),
+            Dir::LEFT => self.find_policy((0, -1)),
+            Dir::UP => self.find_policy((1, 0)),
+            Dir::DOWN => self.find_policy((-1, 0)),
+        }
     }
 }
 
