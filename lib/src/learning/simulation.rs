@@ -21,20 +21,41 @@ pub struct MoveLog {
     // The player who won from this board state.
     pub winner: String,
 }
+pub enum Dir {
+    RIGHT,
+    LEFT,
+    UP,
+    DOWN,
+}
 
 impl MoveLog {
-    // If the first snake is the winner -> 1.0
-    // If the second snake is the winner -> -1.0
-    // Ties == 0.0
-    pub fn get_expected_value(&self) -> f64 {
-        if self.board.snakes[0].id == self.winner {
-            return 1.0;
+    // Returns a one hot encoded winner based
+    // on the order of the snakes in the board state.
+    pub fn get_winner_index(&self) -> u32 {
+        for (idx, bs) in self.board.snakes.iter().enumerate() {
+            if bs.id == self.winner {
+                return idx as u32;
+            }
         }
+        return 0;
+    }
 
-        if self.board.snakes[1].id == self.winner {
-            return -1.0;
+    fn find_policy(&self, dir: (i32, i32)) -> f64 {
+        for pdir in &self.policy {
+            if pdir.dir == dir {
+                return pdir.p;
+            }
         }
         return 0.0;
+    }
+
+    pub fn policy_prior(&self, dir: Dir) -> f64 {
+        match dir {
+            Dir::RIGHT => self.find_policy((0, 1)),
+            Dir::LEFT => self.find_policy((0, -1)),
+            Dir::UP => self.find_policy((1, 0)),
+            Dir::DOWN => self.find_policy((-1, 0)),
+        }
     }
 }
 

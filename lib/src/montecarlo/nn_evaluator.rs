@@ -15,10 +15,13 @@ use candle_nn::Optimizer;
 use candle_nn::VarBuilder;
 use candle_nn::VarMap;
 
+use crate::learning::simulation::DataLoader;
+use crate::learning::simulation::Dir;
 use crate::learning::simulation::MoveLog;
 use crate::models::Board;
 use crate::models::Coord;
 use crate::montecarlo::evaulator::Evaluator;
+use crate::montecarlo::evaulator::MovePolicy;
 use crate::utils;
 
 // This includes the 11x11 board plus the 2 extra rows and columns for the walls.
@@ -51,7 +54,14 @@ impl SimpleConv {
 
         // Output matrix size 6400 = |batch|x64x(14-4)x(14-4);
         let ln1 = linear(6400, 200, vb.pp("ln1"))?;
-        let ln2 = linear(200, 1, vb.pp("ln2"))?;
+
+        // The out dimensions correspond to -
+        //
+        // Value - 2 [First player win chance, Second player win chance].
+        //
+        // The policy - The 4 priors of each direction [UP, DOWN, LEFT, RIGHT].
+        //
+        let ln2 = linear(200, 6, vb.pp("ln2"))?;
         return Ok(Self {
             cv1,
             cv2,
@@ -77,16 +87,31 @@ impl SimpleConv {
         let x = x.relu()?;
         let x = self.ln1.forward(&x)?.relu()?;
 
-        // The final activation should be tanh so that we fall in between [-1,1].
-        let x = self.ln2.forward(&x)?.tanh()?;
+        // This will now be a batchx6x1 matrix.
+        let x = self.ln2.forward(&x)?;
         return Ok(x);
     }
 
-    fn label_batch_tensor(&self, labels: Vec<f64>) -> Tensor {
-        let tensors = labels
-            .iter()
-            .map(|t| Tensor::from_vec(vec![*t], 1, &self.device).unwrap());
-        Tensor::stack(&tensors.collect::<Vec<Tensor>>(), 0).unwrap()
+    fn log_to_label(&self, log: &MoveLog) -> Tensor {
+        let mut vec = vec![0.0; 6];
+
+        // Set the winner within the first two indices.
+        let windex = log.get_winner_index() as usize;
+        vec[windex] = 1.0;
+
+        vec[2] = log.policy_prior(Dir::UP);
+        vec[3] = log.policy_prior(Dir::DOWN);
+        vec[4] = log.policy_prior(Dir::LEFT);
+        vec[5] = log.policy_prior(Dir::RIGHT);
+
+        let dim = vec.len();
+        return Tensor::from_vec(vec, dim, &self.device).unwrap();
+    }
+
+    fn batch_log_to_label(&self, logs: &Vec<MoveLog>) -> Tensor {
+        let tensors: Vec<Tensor> =
+            logs.iter().map(|l| self.log_to_label(l)).collect();
+        Tensor::stack(&tensors, 0).unwrap()
     }
 
     pub fn save(&self, path: &str) -> Result<(), error::Error> {
@@ -117,14 +142,11 @@ impl SimpleConv {
 
             let inference = self.forward(batch_tensor)?;
             println!("Inference tensor {:?}", inference);
-            let targets = self.label_batch_tensor(
-                batch
-                    .iter()
-                    .map(|l| return l.get_expected_value())
-                    .collect(),
-            );
+            let targets = self.batch_log_to_label(&batch);
             println!("Target tensor {:?}", targets);
-            let loss = candle_nn::loss::mse(&inference, &targets)?;
+            let loss = candle_nn::loss::binary_cross_entropy_with_logit(
+                &inference, &targets,
+            )?;
             println!("Caltulated loss");
             optimiser.backward_step(&loss)?;
             println!("Epoch: {epoch}, Loss: {:?}", loss.to_vec0::<f64>()?);
@@ -210,10 +232,8 @@ impl NNEvaulator {
         }
         return Tensor::stack(&tensors, 0).unwrap();
     }
-}
 
-impl Evaluator for NNEvaulator {
-    fn predict_winner(&self, board: &Board, current_snake: &str) -> String {
+    fn generate_output(&self, board: &Board, current_snake: &str) -> Vec<f64> {
         let starter_snake = board.get_snake(current_snake);
         let mut board = board.clone();
         utils::fix_snake_order(&mut board, starter_snake.clone());
@@ -223,20 +243,57 @@ impl Evaluator for NNEvaulator {
         let input_tensor = NNEvaulator::generate_input_tensor_batch(&boards);
         let input_tensor = input_tensor.to_device(&self.model.device).unwrap();
         let output = self.model.forward(input_tensor).unwrap();
-
         let output = output.flatten(0, output.dims().len() - 1).unwrap();
-        let output = output.to_vec1::<f64>().unwrap();
-        let output = output[0];
+        output.to_vec1::<f64>().unwrap()
+    }
+}
 
-        if output > 0.0 {
-            return board.snakes[0].id.to_string();
+impl Evaluator for NNEvaulator {
+    fn predict_winner(&self, board: &Board, current_snake: &str) -> String {
+        let output = self.generate_output(board, current_snake);
+        let mut max_idx = 0;
+        let mut max_v = 0.0;
+        for (idx, v) in output.iter().enumerate() {
+            // Only the first 2 indices are used for predicting winner.
+            if idx > 1 {
+                break;
+            }
+            if v > &max_v {
+                max_idx = idx;
+                max_v = *v;
+            }
         }
+        return board.snakes[max_idx].id.clone();
+    }
 
-        if output < 0.0 {
-            return board.snakes[1].id.to_string();
-        }
-
-        return "tie".to_string();
+    fn predict_best_moves(
+        &self,
+        board: &Board,
+        current_snake: &str,
+    ) -> Vec<super::evaulator::MovePolicy> {
+        let output = self.generate_output(board, current_snake);
+        let mut vec = vec![];
+        // UP
+        vec.push(MovePolicy {
+            dir: (1, 0),
+            p: output[2],
+        });
+        // DOWN
+        vec.push(MovePolicy {
+            dir: (-1, 0),
+            p: output[3],
+        });
+        // LEFT
+        vec.push(MovePolicy {
+            dir: (0, -1),
+            p: output[4],
+        });
+        // RIGHT
+        vec.push(MovePolicy {
+            dir: (0, 1),
+            p: output[5],
+        });
+        vec
     }
 }
 
@@ -302,6 +359,22 @@ mod test {
 
         // Expect that it returned a valid string
         assert!(nn_eval.predict_winner(&board.board, &board.you.id).len() > 0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn predict_policy() -> Result<(), Box<dyn std::error::Error>> {
+        let board = get_board();
+        let nn_eval = NNEvaulator::new()?;
+
+        // Expect that it returned a length 4 vec.
+        assert!(
+            nn_eval
+                .predict_best_moves(&board.board, &board.you.id)
+                .len()
+                == 4
+        );
 
         Ok(())
     }
