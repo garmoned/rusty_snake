@@ -154,7 +154,6 @@ impl Agent {
             config: config,
         }
     }
-
     pub fn new(snake: String) -> Self {
         Self {
             starting_snake_id: snake.clone(),

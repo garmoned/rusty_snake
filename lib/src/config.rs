@@ -31,7 +31,7 @@ impl MonteCarloConfig {
     pub fn default() -> Self {
         Self {
             iterations: 6000,
-            max_duration: 100, // In milliseconds.
+            max_duration: 500, // In milliseconds.
             evaulator: Evaluator::RANDOM,
         }
     }

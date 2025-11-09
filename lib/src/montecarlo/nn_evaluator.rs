@@ -83,8 +83,10 @@ impl SimpleConv {
     }
 
     fn label_batch_tensor(&self, labels: Vec<f64>) -> Tensor {
-        let dim = labels.len();
-        Tensor::from_vec(labels, dim, &self.device).unwrap()
+        let tensors = labels
+            .iter()
+            .map(|t| Tensor::from_vec(vec![*t], 1, &self.device).unwrap());
+        Tensor::stack(&tensors.collect::<Vec<Tensor>>(), 0).unwrap()
     }
 
     pub fn save(&self, path: &str) -> Result<(), error::Error> {
