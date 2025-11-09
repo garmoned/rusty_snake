@@ -15,7 +15,7 @@ use candle_nn::Optimizer;
 use candle_nn::VarBuilder;
 use candle_nn::VarMap;
 
-use crate::learning::simulation::DataLoader;
+use crate::learning::simulation::MoveLog;
 use crate::models::Board;
 use crate::models::Coord;
 use crate::montecarlo::evaulator::Evaluator;
@@ -51,7 +51,7 @@ impl SimpleConv {
 
         // Output matrix size 6400 = |batch|x64x(14-4)x(14-4);
         let ln1 = linear(6400, 200, vb.pp("ln1"))?;
-        let ln2 = linear(200, 2, vb.pp("ln2"))?;
+        let ln2 = linear(200, 1, vb.pp("ln2"))?;
         return Ok(Self {
             cv1,
             cv2,
@@ -76,13 +76,13 @@ impl SimpleConv {
         let x = x.flatten(1, x.dims().len() - 1)?;
         let x = x.relu()?;
         let x = self.ln1.forward(&x)?.relu()?;
-        let x = self.ln2.forward(&x)?;
-        // This should be a 1 dimensional matrix now.
-        let x = candle_nn::ops::softmax(&x, 1)?;
+
+        // The final activation should be tanh so that we fall in between [-1,1].
+        let x = self.ln2.forward(&x)?.tanh()?;
         return Ok(x);
     }
 
-    fn label_batch_tensor(&self, labels: Vec<u32>) -> Tensor {
+    fn label_batch_tensor(&self, labels: Vec<f64>) -> Tensor {
         let dim = labels.len();
         Tensor::from_vec(labels, dim, &self.device).unwrap()
     }
@@ -99,12 +99,15 @@ impl SimpleConv {
     // that the model is training at all.
     pub fn train(
         &self,
-        data: &DataLoader,
+        data: &Vec<MoveLog>,
     ) -> Result<(), candle_core::error::Error> {
+        println!("Training on batch size {} ", data.len());
         let mut optimiser = AdamW::new_lr(self.var_map.all_vars(), 0.001)?;
         let mut epoch = 0;
         let chunk_size = (data.len() / 100) + 1;
-        for batch in data.read_in_chunks(chunk_size) {
+        println!("Training on breaking batch into chunks of {} ", chunk_size);
+
+        for batch in data.chunks(chunk_size) {
             let boards = batch.iter().map(|l| return &l.board).collect();
             let batch_tensor =
                 NNEvaulator::generate_input_tensor_batch(&boards);
@@ -113,10 +116,13 @@ impl SimpleConv {
             let inference = self.forward(batch_tensor)?;
             println!("Inference tensor {:?}", inference);
             let targets = self.label_batch_tensor(
-                batch.iter().map(|l| return l.get_winner_index()).collect(),
+                batch
+                    .iter()
+                    .map(|l| return l.get_expected_value())
+                    .collect(),
             );
             println!("Target tensor {:?}", targets);
-            let loss = candle_nn::loss::nll(&inference, &targets)?;
+            let loss = candle_nn::loss::mse(&inference, &targets)?;
             println!("Caltulated loss");
             optimiser.backward_step(&loss)?;
             println!("Epoch: {epoch}, Loss: {:?}", loss.to_vec0::<f64>()?);
@@ -215,20 +221,20 @@ impl Evaluator for NNEvaulator {
         let input_tensor = NNEvaulator::generate_input_tensor_batch(&boards);
         let input_tensor = input_tensor.to_device(&self.model.device).unwrap();
         let output = self.model.forward(input_tensor).unwrap();
-        let output = candle_nn::ops::softmax(&output, 1).unwrap();
 
         let output = output.flatten(0, output.dims().len() - 1).unwrap();
         let output = output.to_vec1::<f64>().unwrap();
+        let output = output[0];
 
-        let mut max_idx = 0;
-        let mut max_v = 0.0;
-        for (idx, v) in output.iter().enumerate() {
-            if v > &max_v {
-                max_idx = idx;
-                max_v = *v;
-            }
+        if output > 0.0 {
+            return board.snakes[0].id.to_string();
         }
-        return board.snakes[max_idx].id.clone();
+
+        if output < 0.0 {
+            return board.snakes[1].id.to_string();
+        }
+
+        return "tie".to_string();
     }
 }
 

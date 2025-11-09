@@ -22,106 +22,18 @@ pub struct MoveLog {
 }
 
 impl MoveLog {
-    // Returns a one hot encoded winner based
-    // on the order of the snakes in the board state.
-    pub fn get_winner_index(&self) -> u32 {
-        for (idx, bs) in self.board.snakes.iter().enumerate() {
-            if bs.id == self.winner {
-                return idx as u32;
-            }
+    // If the first snake is the winner -> 1.0
+    // If the second snake is the winner -> -1.0
+    // Ties == 0.0
+    pub fn get_expected_value(&self) -> f64 {
+        if self.board.snakes[0].id == self.winner {
+            return 1.0;
         }
-        return 0;
-    }
-}
 
-pub enum ReadMode {
-    BATCH(usize),
-    ALL,
-}
-
-pub struct DataLoader {
-    // Where to read and write from on disk.
-    mem_path: String,
-    readmode: ReadMode,
-}
-
-struct FileIterator {
-    // The number of the current batch.
-    batch_number: u64,
-    // The index of the current move log in the batch.
-    batch_index: u64,
-    mem_path: String,
-}
-
-// Iterates over only files from a specific batch.
-struct BatchFileIterator {
-    batch_number: usize,
-    batch_index: u64,
-    mem_path: String,
-}
-
-impl BatchFileIterator {
-    fn new(mem_path: String, batch: usize) -> Self {
-        Self {
-            batch_number: batch,
-            batch_index: 0,
-            mem_path,
+        if self.board.snakes[1].id == self.winner {
+            return -1.0;
         }
-    }
-
-    fn cur_file_path(&self) -> String {
-        format!(
-            "{}batch_{}_{}.json",
-            self.mem_path, self.batch_number, self.batch_index
-        )
-    }
-}
-
-impl Iterator for BatchFileIterator {
-    type Item = String;
-    fn next(&mut self) -> Option<Self::Item> {
-        if std::fs::exists(self.cur_file_path()).unwrap() {
-            let f = Some(self.cur_file_path());
-            self.batch_index += 1;
-            return f;
-        }
-        return None;
-    }
-}
-
-impl FileIterator {
-    fn new(mem_path: String) -> Self {
-        Self {
-            mem_path: mem_path,
-            batch_index: 0,
-            batch_number: 0,
-        }
-    }
-    fn cur_file_path(&self) -> String {
-        format!(
-            "{}batch_{}_{}.json",
-            self.mem_path, self.batch_number, self.batch_index
-        )
-    }
-}
-
-impl Iterator for FileIterator {
-    type Item = String;
-    fn next(&mut self) -> Option<Self::Item> {
-        if std::fs::exists(self.cur_file_path()).unwrap() {
-            let f = Some(self.cur_file_path());
-            self.batch_index += 1;
-            return f;
-        }
-        // Check if we are at the next batch entirely.
-        self.batch_index = 0;
-        self.batch_number += 1;
-        if std::fs::exists(self.cur_file_path()).unwrap() {
-            let f = Some(self.cur_file_path());
-            self.batch_index += 1;
-            return f;
-        }
-        return None;
+        return 0.0;
     }
 }
 
@@ -151,92 +63,12 @@ impl Iterator for DataIterator {
     }
 }
 
-impl DataLoader {
-    fn new(mem_path: String) -> Self {
-        Self {
-            readmode: ReadMode::ALL,
-            mem_path,
-        }
-    }
-
-    pub fn set_readmode(&mut self, mode: ReadMode) {
-        self.readmode = mode
-    }
-
-    // Reads all data in chunks.
-    pub fn read_in_chunks(&self, chunk_size: usize) -> DataIterator {
-        match self.readmode {
-            ReadMode::BATCH(batch) => DataIterator {
-                file_iterator: Box::from(BatchFileIterator::new(
-                    self.mem_path.clone(),
-                    batch,
-                )),
-                chunk_size,
-            },
-            ReadMode::ALL => DataIterator {
-                file_iterator: Box::from(FileIterator::new(
-                    self.mem_path.clone(),
-                )),
-                chunk_size,
-            },
-        }
-    }
-
-    pub fn clear_batch(&self) {
-        let files = fs::read_dir(&self.mem_path)
-            .unwrap()
-            .map(|e| e.unwrap())
-            .filter(|e| e.metadata().unwrap().is_file());
-        for f in files {
-            let err = fs::remove_file(f.path());
-            if !err.is_ok() {
-                println!(
-                    "Error while deleting file {:?} , {:?}",
-                    f.path(),
-                    err.err()
-                )
-            }
-        }
-    }
-
-    pub fn len(&self) -> usize {
-        let files = fs::read_dir(&self.mem_path)
-            .unwrap()
-            .map(|e| e.unwrap())
-            .filter(|e| e.metadata().unwrap().is_file());
-        match self.readmode {
-            ReadMode::BATCH(batch_num) => files
-                .filter(|e| {
-                    e.file_name()
-                        .to_str()
-                        .unwrap()
-                        .contains(&format!("batch_{}_", batch_num))
-                })
-                .count(),
-            ReadMode::ALL => files.count(),
-        }
-    }
-
-    fn write(
-        &self,
-        move_log: &MoveLog,
-        batch_number: usize,
-        batch_index: usize,
-    ) {
-        let file_path =
-            format!("./data/moves/batch_{}_{}.json", batch_number, batch_index);
-        let json = serde_json::to_string(&move_log).unwrap();
-        fs::write(file_path, json).unwrap();
-    }
-}
-
 struct MoveLogger {
     current_batch: Vec<MoveLog>,
     current_game: Vec<MoveLog>,
     batch_number: usize,
     winners: HashMap<String, f32>,
     games_played: f32,
-    data_loader: DataLoader,
 }
 
 impl MoveLogger {
@@ -247,7 +79,6 @@ impl MoveLogger {
             batch_number: 0,
             winners: HashMap::new(),
             games_played: 0.0,
-            data_loader: DataLoader::new("./data/moves/".to_string()),
         }
     }
 
@@ -272,13 +103,6 @@ impl MoveLogger {
         });
     }
 
-    pub fn dump_batch(&mut self) {
-        for (n, ml) in self.current_batch.iter().enumerate() {
-            self.data_loader.write(ml, self.batch_number, n);
-        }
-        self.batch_number += 1;
-    }
-
     pub fn log_win(&mut self, winner: &str) {
         for mv in &mut self.current_game {
             mv.winner = winner.to_string();
@@ -287,6 +111,14 @@ impl MoveLogger {
         self.current_game.clear();
         let init = self.winners.get(winner).unwrap_or(&0.0) + 1.0;
         self.winners.insert(winner.to_owned(), init);
+        self.games_played += 1.0;
+    }
+
+    pub fn finish_game(&mut self) {
+        for mv in &mut self.current_game {
+            self.current_batch.push(mv.clone());
+        }
+        self.current_game.clear();
         self.games_played += 1.0;
     }
 
@@ -305,7 +137,6 @@ impl MoveLogger {
     pub fn clear_all(&mut self) {
         self.current_batch.clear();
         self.current_game.clear();
-        self.data_loader.clear_batch();
     }
 }
 
@@ -447,20 +278,7 @@ impl Trainer {
         {
             println!("Skipping model training, in dryrun mode");
         }
-
-        // If we are training offline, use all of the accumulated training data.
-        if self.config.run_mode == RunMode::Offline {
-            self.move_logger.data_loader.set_readmode(ReadMode::ALL);
-        }
-
-        // In training mode, only train off of the most recently generated batch.
-        if self.config.run_mode == RunMode::Train {
-            self.move_logger.data_loader.set_readmode(ReadMode::BATCH(
-                self.move_logger.batch_number - 1,
-            ));
-        }
-
-        self.model.train(&self.move_logger.data_loader).unwrap();
+        self.model.train(&self.move_logger.current_batch).unwrap();
         println!("Training run finished");
         let r = self.model.save("./data/models/basic.safetensor");
         match r {
@@ -493,7 +311,8 @@ impl Trainer {
                 panic!("Ended in non-terminal state")
             }
             crate::board::EndState::Tie => {
-                // Nothing happens on a tie.
+                println!("Ended in a tie");
+                move_logger.finish_game();
             }
         }
     }
@@ -516,7 +335,6 @@ impl Trainer {
             "Finished playing batch {} with {} games played",
             self.move_logger.batch_number, self.move_logger.games_played
         );
-        self.move_logger.dump_batch();
     }
 
     pub fn online_train(&mut self) {
