@@ -72,7 +72,6 @@ impl SimpleConv {
     fn forward(&self, x: Tensor) -> Result<Tensor, candle_core::error::Error> {
         let x = self.cv1.forward(&x)?;
         let x = self.cv2.forward(&x)?;
-        println!("Cv1 output shape {:?}", x);
         // Flatten everything but the batch dimension.
         let x = x.flatten(1, x.dims().len() - 1)?;
         let x = x.relu()?;

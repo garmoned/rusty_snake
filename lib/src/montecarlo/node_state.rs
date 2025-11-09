@@ -101,30 +101,15 @@ impl NodeState {
         self.children = children;
     }
 
-    pub fn get_next_snake(&self, snake_id: &str) -> String {
-        return self.snake_tracker.get_next_snake(snake_id).to_string();
-    }
-
     pub fn set_parent(&mut self, parent: &mut NodeState) {
         self.parent = Some(parent as *mut NodeState)
     }
 
     pub fn play_out(&mut self) {
-        let mut board_copy = self.board_state.clone();
-        let mut end_state = board_copy.get_endstate();
-        let mut current_snake = self.current_snake.clone();
-        while !end_state.is_terminal() {
-            board_copy.execute_random_move(&current_snake);
-            end_state = board_copy.get_endstate();
-            current_snake = self.get_next_snake(&current_snake);
-        }
-        match end_state {
-            crate::board::EndState::Winner(winner) => self.back_prop(&winner),
-            crate::board::EndState::Tie => self.back_prop("tie"),
-            crate::board::EndState::Playing => {
-                panic!("somehow the end state ended with playing")
-            }
-        }
+        let winner = self
+            .evaulator
+            .predict_winner(&self.board_state, &self.current_snake);
+        self.back_prop(&winner);
     }
 
     pub fn back_prop(&mut self, winner: &str) {
