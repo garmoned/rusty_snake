@@ -104,7 +104,7 @@ impl SimpleConv {
         data: &Vec<MoveLog>,
     ) -> Result<(), candle_core::error::Error> {
         println!("Training on batch size {} ", data.len());
-        let mut optimiser = AdamW::new_lr(self.var_map.all_vars(), 0.001)?;
+        let mut optimiser = AdamW::new_lr(self.var_map.all_vars(), 0.0001)?;
         let mut epoch = 0;
         let chunk_size = (data.len() / 100) + 1;
         println!("Training on breaking batch into chunks of {} ", chunk_size);

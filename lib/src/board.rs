@@ -40,6 +40,16 @@ impl Board {
         self.execute_dir(snake_id, dir.clone());
     }
 
+    // Add food randomly.
+    pub fn add_food(&mut self) {
+        let x: u32 = rand::random();
+        let y: u32 = rand::random();
+        self.food.push(Coord {
+            x: (x % (self.width)) as i32,
+            y: (y % (self.height)) as i32,
+        });
+    }
+
     pub fn get_valid_moves(&self, snake_id: &str) -> Vec<(i32, i32)> {
         let mut dirs = vec![];
         let snake = self.get_snake(snake_id);

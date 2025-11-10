@@ -1,3 +1,4 @@
+use rand::random;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::sync::mpsc::channel;
@@ -300,6 +301,10 @@ impl Trainer {
                 state = board.execute(agent.id(), dir, is_last);
                 // Log the player made the move.
                 move_logger.log_move(agent.id(), &board);
+                // Every 10 moves or so throw a food in.
+                if random::<i32>() % 10 == 0 {
+                    board.add_food();
+                }
             }
         }
         match state {
