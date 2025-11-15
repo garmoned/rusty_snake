@@ -1,6 +1,6 @@
 use super::tree::{Dir, SnakeTracker};
 use crate::models::Board;
-use crate::montecarlo::evaulator::Evaluator;
+use crate::montecarlo::evaulator::{Evaluator, MovePolicy};
 use std::rc::Rc;
 
 #[derive(Clone)]
@@ -27,6 +27,8 @@ pub(crate) struct NodeState {
     snake_tracker: Rc<SnakeTracker>,
     // Shared reference to an evaluator used by all nodes.
     evaulator: Rc<dyn Evaluator>,
+
+    policy_pred: f64,
 }
 
 impl NodeState {
@@ -50,6 +52,7 @@ impl NodeState {
             snake_who_moved: snake_who_moved.to_owned(),
             snake_tracker: snake_tracker,
             evaulator: evaulator,
+            policy_pred: 1.0,
         }
     }
 
@@ -60,6 +63,7 @@ impl NodeState {
         snake_tracker: Rc<SnakeTracker>,
         taken_dir: Dir,
         evaulator: Rc<dyn Evaluator>,
+        policy_pred: f64,
     ) -> Self {
         NodeState {
             current_snake,
@@ -72,7 +76,21 @@ impl NodeState {
             board_state,
             snake_tracker: snake_tracker,
             evaulator: evaulator,
+            policy_pred,
         }
+    }
+
+    fn policy_per_move(
+        &self,
+        policy_vec: &Vec<MovePolicy>,
+        dir: (i32, i32),
+    ) -> f64 {
+        for p in policy_vec {
+            if p.dir == dir {
+                return p.p;
+            }
+        }
+        return 0.0;
     }
 
     pub fn expand(&mut self) {
@@ -80,6 +98,9 @@ impl NodeState {
             return;
         }
         let mut children = vec![];
+        let policy_prediction = self
+            .evaulator
+            .predict_best_moves(&self.board_state, &self.current_snake);
         for dir in self.board_state.get_valid_moves(&self.current_snake) {
             let mut new_board = self.board_state.clone();
             new_board.execute_dir(&self.current_snake, dir);
@@ -93,7 +114,8 @@ impl NodeState {
                 snake_tracker.clone(),
                 dir,
                 self.evaulator.clone(),
-            ))
+                self.policy_per_move(&policy_prediction, dir),
+            ));
         }
         for child in &mut children {
             child.set_parent(self);
@@ -152,8 +174,9 @@ impl NodeState {
         if self.sims == 0 {
             return f64::INFINITY;
         }
-        let discover =
-            ((parent_sims + 1.0).ln() / self.sims()).sqrt() * NodeState::C;
+        let discover = ((parent_sims + 1.0).ln() / self.sims()).sqrt()
+            * NodeState::C
+            * self.policy_pred;
         let reward = self.wins() / self.sims();
         return reward + discover + self.heuristic();
     }

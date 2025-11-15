@@ -60,6 +60,24 @@ impl Evaluator for RREvaulator {
     }
 
     fn predict_best_moves(&self, _: &Board, _: &str) -> Vec<MovePolicy> {
-        panic!("Unimplemented for random moves");
+        // return an even distribution of moves.
+        return vec![
+            MovePolicy {
+                dir: (1, 0),
+                p: 0.25,
+            },
+            MovePolicy {
+                dir: (0, 1),
+                p: 0.25,
+            },
+            MovePolicy {
+                dir: (-1, 0),
+                p: 0.25,
+            },
+            MovePolicy {
+                dir: (0, -1),
+                p: 0.25,
+            },
+        ];
     }
 }

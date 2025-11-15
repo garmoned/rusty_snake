@@ -1,6 +1,4 @@
 use core::f64;
-use std::ops::Deref;
-use std::rc::Rc;
 
 use candle_core::error;
 use candle_core::DType;
@@ -143,8 +141,8 @@ impl CommonModel {
             let targets = unit.label_batch(&batch);
             println!("Target tensor {:?}", targets);
             let loss = unit.loss_fn(&inference, &targets)?;
-            println!("Caltulated loss");
             optimiser.backward_step(&loss)?;
+            println!("Caltulated loss: {:?}", loss.to_vec0::<f64>());
         }
         Ok(())
     }
@@ -225,7 +223,7 @@ impl ModelUnit for PolicyUnit {
         inference: &Tensor,
         targets: &Tensor,
     ) -> Result<Tensor, candle_core::error::Error> {
-        candle_nn::loss::binary_cross_entropy_with_logit(inference, targets)
+        candle_nn::loss::mse(inference, targets)
     }
     fn train(
         &self,
