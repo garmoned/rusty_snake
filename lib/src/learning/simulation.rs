@@ -7,6 +7,7 @@ use std::{collections::HashMap, fs};
 
 use crate::config::Evaluator;
 use crate::montecarlo::evaulator::MovePolicy;
+use crate::utils;
 use crate::{
     config::MonteCarloConfig,
     models::Board,
@@ -54,10 +55,10 @@ impl MoveLog {
 
     pub fn policy_prior(&self, dir: Dir) -> f64 {
         match dir {
-            Dir::RIGHT => self.find_policy((0, 1)),
-            Dir::LEFT => self.find_policy((0, -1)),
-            Dir::UP => self.find_policy((1, 0)),
-            Dir::DOWN => self.find_policy((-1, 0)),
+            Dir::RIGHT => self.find_policy(utils::RIGHT),
+            Dir::LEFT => self.find_policy(utils::LEFT),
+            Dir::UP => self.find_policy(utils::UP),
+            Dir::DOWN => self.find_policy(utils::DOWN),
         }
     }
 }

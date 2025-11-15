@@ -159,10 +159,10 @@ impl PolicyUnit {
 
     fn label_fn(&self, log: &MoveLog) -> Tensor {
         let mut vec = vec![0.0; 4];
-        vec[0] = log.policy_prior(Dir::UP);
-        vec[1] = log.policy_prior(Dir::DOWN);
-        vec[2] = log.policy_prior(Dir::LEFT);
-        vec[3] = log.policy_prior(Dir::RIGHT);
+        vec[utils::UP_IDX] = log.policy_prior(Dir::UP);
+        vec[utils::DOWN_IDX] = log.policy_prior(Dir::DOWN);
+        vec[utils::LEFT_IDX] = log.policy_prior(Dir::LEFT);
+        vec[utils::RIGHT_IDX] = log.policy_prior(Dir::RIGHT);
         Tensor::from_vec(vec, 4, &self.device).unwrap()
     }
 }
@@ -437,12 +437,22 @@ impl Evaluator for NNEvaulator {
             .unwrap();
         let output = output.to_vec1::<f64>().unwrap();
         let mut policies = vec![];
-        for (idx, v) in output.iter().enumerate() {
-            policies.push(MovePolicy {
-                dir: utils::DIRECTIONS[idx as usize],
-                p: *v,
-            });
-        }
+        policies.push(MovePolicy {
+            dir: utils::RIGHT,
+            p: output[utils::RIGHT_IDX],
+        });
+        policies.push(MovePolicy {
+            dir: utils::UP,
+            p: output[utils::UP_IDX],
+        });
+        policies.push(MovePolicy {
+            dir: utils::LEFT,
+            p: output[utils::LEFT_IDX],
+        });
+        policies.push(MovePolicy {
+            dir: utils::DOWN,
+            p: output[utils::DOWN_IDX],
+        });
         policies
     }
 }
