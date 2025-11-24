@@ -14,6 +14,8 @@ use candle_nn::Module;
 use candle_nn::Optimizer;
 use candle_nn::VarBuilder;
 use candle_nn::VarMap;
+use rand::seq::SliceRandom;
+use rand::thread_rng;
 
 use crate::learning::simulation::Dir;
 use crate::learning::simulation::MoveLog;
@@ -29,10 +31,10 @@ const BOARD_SIZE: usize = 14;
 trait ModelUnit {
     fn forward(
         &self,
-        x: Tensor,
+        x: &Tensor,
         common_model: &CommonModel,
     ) -> Result<Tensor, candle_core::error::Error>;
-    fn label_batch(&self, logs: &[MoveLog]) -> Tensor;
+    fn label_batch(&self, logs: &[&MoveLog]) -> Tensor;
     fn loss_fn(
         &self,
         inference: &Tensor,
@@ -113,7 +115,7 @@ impl CommonModel {
 
     fn common_forward(
         &self,
-        x: Tensor,
+        x: &Tensor,
     ) -> Result<Tensor, candle_core::error::Error> {
         let x = self.cv1.forward(&x)?;
         let x = x.relu()?;
@@ -133,18 +135,22 @@ impl CommonModel {
     ) -> Result<(), candle_core::error::Error> {
         println!("Training on batch size {} ", data.len());
         let mut optimiser = AdamW::new_lr(self.var_map.all_vars(), 0.0001)?;
-        let chunk_size = (data.len() / 10) + 1;
+        let chunk_size = 256;
         println!("Training on breaking batch into chunks of {} ", chunk_size);
+
+        let mut data: Vec<&MoveLog> = data.iter().map(|unit| unit).collect();
+        data.shuffle(&mut thread_rng());
+
         for batch in data.chunks(chunk_size) {
             let boards = batch.iter().map(|l| return &l.board).collect();
             let batch_tensor =
                 NNEvaulator::generate_input_tensor_batch(&boards);
+            let batch_tensor = batch_tensor.to_device(&self.device)?;
 
             let mut loss: Option<Tensor> = None;
 
             for unit in units.as_slice() {
-                let batch_tensor = batch_tensor.to_device(&self.device)?;
-                let inference = unit.forward(batch_tensor, &self)?;
+                let inference = unit.forward(&batch_tensor, &self)?;
                 let targets = unit.label_batch(&batch);
                 let local_loss = unit.loss_fn(&inference, &targets)?;
                 match loss {
@@ -216,7 +222,7 @@ impl ValueUnit {
 impl ModelUnit for PolicyUnit {
     fn forward(
         &self,
-        x: Tensor,
+        x: &Tensor,
         common_model: &CommonModel,
     ) -> Result<Tensor, candle_core::error::Error> {
         let x = common_model.common_forward(x)?;
@@ -227,7 +233,7 @@ impl ModelUnit for PolicyUnit {
         Ok(x)
     }
 
-    fn label_batch(&self, logs: &[MoveLog]) -> Tensor {
+    fn label_batch(&self, logs: &[&MoveLog]) -> Tensor {
         let mut tensors = vec![];
         for log in logs {
             tensors.push(self.label_fn(log));
@@ -250,7 +256,7 @@ impl ModelUnit for PolicyUnit {
 impl ModelUnit for ValueUnit {
     fn forward(
         &self,
-        x: Tensor,
+        x: &Tensor,
         common_model: &CommonModel,
     ) -> Result<Tensor, candle_core::error::Error> {
         let x = common_model.common_forward(x)?;
@@ -260,7 +266,7 @@ impl ModelUnit for ValueUnit {
         Ok(x)
     }
 
-    fn label_batch(&self, logs: &[MoveLog]) -> Tensor {
+    fn label_batch(&self, logs: &[&MoveLog]) -> Tensor {
         let mut tensors = vec![];
         for log in logs {
             tensors.push(self.label_fn(log));
@@ -307,14 +313,14 @@ impl MultiOutputModel {
 
     pub fn policy_forward(
         &self,
-        x: Tensor,
+        x: &Tensor,
     ) -> Result<Tensor, candle_core::error::Error> {
         self.policy_unit.forward(x, &self.common)
     }
 
     pub fn value_forward(
         &self,
-        x: Tensor,
+        x: &Tensor,
     ) -> Result<Tensor, candle_core::error::Error> {
         self.value_unit.forward(x, &self.common)
     }
@@ -414,7 +420,7 @@ impl Evaluator for NNEvaulator {
             .unwrap();
 
         // Output is in the format batch X value.
-        let output = self.model.value_forward(input).unwrap();
+        let output = self.model.value_forward(&input).unwrap();
         let output = output.squeeze(0).unwrap();
         let output = output.to_vec1::<f32>().unwrap()[0];
         if output > 0.1 {
@@ -437,7 +443,7 @@ impl Evaluator for NNEvaulator {
             .unwrap();
         let output = self
             .model
-            .policy_forward(input)
+            .policy_forward(&input)
             .unwrap()
             .squeeze(0)
             .unwrap();

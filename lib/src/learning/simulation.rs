@@ -1,12 +1,14 @@
 use rand::random;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use std::sync::mpsc::channel;
 use std::usize;
 use std::{collections::HashMap, fs};
 
 use crate::config::Evaluator;
 use crate::montecarlo::evaulator::MovePolicy;
+use crate::montecarlo::nn_evaluator::NNEvaulator;
 use crate::utils;
 use crate::{
     config::MonteCarloConfig,
