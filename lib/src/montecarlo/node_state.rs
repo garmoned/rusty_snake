@@ -174,7 +174,7 @@ impl NodeState {
         if self.sims == 0 {
             return f64::INFINITY;
         }
-        let discover = ((parent_sims + 1.0).ln() / self.sims()).sqrt()
+        let discover = ((parent_sims).ln() / (1.0 + self.sims())).sqrt()
             * NodeState::C
             * self.policy_pred;
         let reward = self.wins() / self.sims();

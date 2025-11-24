@@ -1,4 +1,4 @@
-use core::f64;
+use core::f32;
 
 use candle_core::error;
 use candle_core::DType;
@@ -38,16 +38,15 @@ trait ModelUnit {
         inference: &Tensor,
         targets: &Tensor,
     ) -> Result<Tensor, candle_core::error::Error>;
-    fn train(
-        &self,
-        data: &Vec<MoveLog>,
-        common_model: &CommonModel,
-    ) -> Result<(), candle_core::error::Error>;
 }
 
 pub struct CommonModel {
     cv1: Conv2d,
     cv2: Conv2d,
+
+    // Normalization layer.
+    ln_norm: candle_nn::LayerNorm,
+
     ln1: Linear,
 
     pub pn: Linear,
@@ -62,15 +61,18 @@ impl CommonModel {
         let var_map = VarMap::new();
         let device = Device::new_cuda(0)?;
         // Input matrix size = |batch|x5x11x11.
-        let vb = VarBuilder::from_varmap(&var_map, DType::F64, &device);
+        let vb = VarBuilder::from_varmap(&var_map, DType::F32, &device);
 
         let cv1 =
             conv2d_no_bias(5, 256, 3, Conv2dConfig::default(), vb.pp("cv1"))?;
         let cv2 =
             conv2d_no_bias(256, 64, 3, Conv2dConfig::default(), vb.pp("cv2"))?;
 
+        let ln_norm = candle_nn::layer_norm(6400, 1e-5, vb.pp("ln_norm"))?;
+
         // Output matrix size 6400 = |batch|x64x(14-4)x(14-4);
         let ln1 = linear(6400, 200, vb.pp("ln1"))?;
+
         // The out dimensions correspond to -
         //
         // The policy - The 4 priors of each direction [UP, DOWN, LEFT, RIGHT]
@@ -86,6 +88,7 @@ impl CommonModel {
         Ok(Self {
             cv1,
             cv2,
+            ln_norm,
             ln1,
             pn,
             vn,
@@ -113,10 +116,12 @@ impl CommonModel {
         x: Tensor,
     ) -> Result<Tensor, candle_core::error::Error> {
         let x = self.cv1.forward(&x)?;
+        let x = x.relu()?;
         let x = self.cv2.forward(&x)?;
         // Flatten everything but the batch dimension.
         let x = x.flatten(1, x.dims().len() - 1)?;
         let x = x.relu()?;
+        let x = self.ln_norm.forward(&x)?;
         let x = self.ln1.forward(&x)?.relu()?;
         Ok(x)
     }
@@ -124,25 +129,37 @@ impl CommonModel {
     fn train(
         &self,
         data: &Vec<MoveLog>,
-        unit: &dyn ModelUnit,
+        units: Vec<&dyn ModelUnit>,
     ) -> Result<(), candle_core::error::Error> {
         println!("Training on batch size {} ", data.len());
         let mut optimiser = AdamW::new_lr(self.var_map.all_vars(), 0.0001)?;
-        let chunk_size = (data.len() / 100) + 1;
+        let chunk_size = (data.len() / 10) + 1;
         println!("Training on breaking batch into chunks of {} ", chunk_size);
         for batch in data.chunks(chunk_size) {
             let boards = batch.iter().map(|l| return &l.board).collect();
             let batch_tensor =
                 NNEvaulator::generate_input_tensor_batch(&boards);
-            let batch_tensor = batch_tensor.to_device(&self.device)?;
 
-            let inference = unit.forward(batch_tensor, &self)?;
-            println!("Inference tensor {:?}", inference);
-            let targets = unit.label_batch(&batch);
-            println!("Target tensor {:?}", targets);
-            let loss = unit.loss_fn(&inference, &targets)?;
-            optimiser.backward_step(&loss)?;
-            println!("Caltulated loss: {:?}", loss.to_vec0::<f64>());
+            let mut loss: Option<Tensor> = None;
+
+            for unit in units.as_slice() {
+                let batch_tensor = batch_tensor.to_device(&self.device)?;
+                let inference = unit.forward(batch_tensor, &self)?;
+                let targets = unit.label_batch(&batch);
+                let local_loss = unit.loss_fn(&inference, &targets)?;
+                match loss {
+                    Some(g_loss) => loss = Some(g_loss.add(&local_loss)?),
+                    None => loss = Some(local_loss),
+                }
+            }
+
+            match loss {
+                Some(g_loss) => {
+                    optimiser.backward_step(&g_loss)?;
+                    println!("Caltulated loss: {:?}", g_loss.to_vec0::<f32>())
+                }
+                None => panic!("No loss calculated"),
+            }
         }
         Ok(())
     }
@@ -158,11 +175,11 @@ impl PolicyUnit {
     }
 
     fn label_fn(&self, log: &MoveLog) -> Tensor {
-        let mut vec = vec![0.0; 4];
-        vec[utils::UP_IDX] = log.policy_prior(Dir::UP);
-        vec[utils::DOWN_IDX] = log.policy_prior(Dir::DOWN);
-        vec[utils::LEFT_IDX] = log.policy_prior(Dir::LEFT);
-        vec[utils::RIGHT_IDX] = log.policy_prior(Dir::RIGHT);
+        let mut vec: Vec<f32> = vec![0.0; 4];
+        vec[utils::UP_IDX] = log.policy_prior(Dir::UP) as f32;
+        vec[utils::DOWN_IDX] = log.policy_prior(Dir::DOWN) as f32;
+        vec[utils::LEFT_IDX] = log.policy_prior(Dir::LEFT) as f32;
+        vec[utils::RIGHT_IDX] = log.policy_prior(Dir::RIGHT) as f32;
         Tensor::from_vec(vec, 4, &self.device).unwrap()
     }
 }
@@ -173,7 +190,7 @@ pub struct ValueUnit {
 
 impl ValueUnit {
     fn label_fn(&self, log: &MoveLog) -> Tensor {
-        let mut vec = vec![0.0; 1];
+        let mut vec: Vec<f32> = vec![0.0; 1];
         match log.get_winner_index() {
             Some(idx) => {
                 // If the winner is the first snake, set the value to 1.0.
@@ -206,7 +223,7 @@ impl ModelUnit for PolicyUnit {
         let x = common_model.pn.forward(&x)?;
 
         // Apply softmax so that all outcomes are scaled to sum to 1.
-        let x = candle_nn::ops::softmax(&x, 1)?;
+        let x = candle_nn::ops::log_softmax(&x, 1)?;
         Ok(x)
     }
 
@@ -223,14 +240,10 @@ impl ModelUnit for PolicyUnit {
         inference: &Tensor,
         targets: &Tensor,
     ) -> Result<Tensor, candle_core::error::Error> {
-        candle_nn::loss::mse(inference, targets)
-    }
-    fn train(
-        &self,
-        data: &Vec<MoveLog>,
-        common_model: &CommonModel,
-    ) -> Result<(), candle_core::error::Error> {
-        common_model.train(data, self)
+        let loss = (targets * inference)?.sum(1)?; // Sum(Target * LogProb)
+        let loss = loss.mean(0)?;
+        let loss = loss.neg()?;
+        Ok(loss)
     }
 }
 
@@ -260,13 +273,6 @@ impl ModelUnit for ValueUnit {
         targets: &Tensor,
     ) -> Result<Tensor, candle_core::error::Error> {
         candle_nn::loss::mse(inference, targets)
-    }
-    fn train(
-        &self,
-        data: &Vec<MoveLog>,
-        common_model: &CommonModel,
-    ) -> Result<(), candle_core::error::Error> {
-        common_model.train(data, self)
     }
 }
 
@@ -317,9 +323,9 @@ impl MultiOutputModel {
         &self,
         data: &Vec<MoveLog>,
     ) -> Result<(), candle_core::error::Error> {
-        // Should eventually parallelize this but right now traning is not a bottleneck.
-        self.policy_unit.train(data, &self.common)?;
-        self.value_unit.train(data, &self.common)?;
+        let units: Vec<&dyn ModelUnit> =
+            vec![&self.policy_unit, &self.value_unit];
+        self.common.train(data, units)?;
         Ok(())
     }
 }
@@ -347,7 +353,7 @@ impl NNEvaulator {
     // Takes in a single vector of points and encodes them into an 14x14
     // tensor one hot encoded.
     pub fn one_hot_encode(points: &Vec<Coord>) -> Tensor {
-        let mut grid: Vec<f64> = vec![0.0; BOARD_SIZE * BOARD_SIZE];
+        let mut grid: Vec<f32> = vec![0.0; BOARD_SIZE * BOARD_SIZE];
 
         for coord in points {
             // We shift the x and y over 1 to project them from the range [-1, 12]x[-1, 12] to [0, 13][0, 13].
@@ -410,7 +416,7 @@ impl Evaluator for NNEvaulator {
         // Output is in the format batch X value.
         let output = self.model.value_forward(input).unwrap();
         let output = output.squeeze(0).unwrap();
-        let output = output.to_vec1::<f64>().unwrap()[0];
+        let output = output.to_vec1::<f32>().unwrap()[0];
         if output > 0.1 {
             return board.snakes[0].id.clone();
         }
@@ -435,23 +441,24 @@ impl Evaluator for NNEvaulator {
             .unwrap()
             .squeeze(0)
             .unwrap();
-        let output = output.to_vec1::<f64>().unwrap();
+        let output = output.exp().unwrap();
+        let output = output.to_vec1::<f32>().unwrap();
         let mut policies = vec![];
         policies.push(MovePolicy {
             dir: utils::RIGHT,
-            p: output[utils::RIGHT_IDX],
+            p: output[utils::RIGHT_IDX] as f64,
         });
         policies.push(MovePolicy {
             dir: utils::UP,
-            p: output[utils::UP_IDX],
+            p: output[utils::UP_IDX] as f64,
         });
         policies.push(MovePolicy {
             dir: utils::LEFT,
-            p: output[utils::LEFT_IDX],
+            p: output[utils::LEFT_IDX] as f64,
         });
         policies.push(MovePolicy {
             dir: utils::DOWN,
-            p: output[utils::DOWN_IDX],
+            p: output[utils::DOWN_IDX] as f64,
         });
         policies
     }
@@ -460,7 +467,7 @@ impl Evaluator for NNEvaulator {
 #[cfg(test)]
 mod test {
 
-    use core::f64;
+    use core::f32;
 
     use crate::test_utils::scenarios::get_board;
 
@@ -477,7 +484,7 @@ mod test {
         vec.push(Coord { x: -1, y: 12 });
 
         let tensor = NNEvaulator::one_hot_encode(&vec);
-        let o_vec = tensor.to_vec2::<f64>()?;
+        let o_vec = tensor.to_vec2::<f32>()?;
 
         println!("nested tensor: {:?}", o_vec);
 

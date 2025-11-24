@@ -64,19 +64,19 @@ impl Evaluator for RREvaulator {
         return vec![
             MovePolicy {
                 dir: (1, 0),
-                p: 0.25,
+                p: 1.0,
             },
             MovePolicy {
                 dir: (0, 1),
-                p: 0.25,
+                p: 1.0,
             },
             MovePolicy {
                 dir: (-1, 0),
-                p: 0.25,
+                p: 1.0,
             },
             MovePolicy {
                 dir: (0, -1),
-                p: 0.25,
+                p: 1.0,
             },
         ];
     }

@@ -141,7 +141,7 @@ impl Tree {
             policy.push(MovePolicy {
                 dir: node.taken_dir,
                 // Normalize all of the probabilities.
-                p: node.sims() / t_sims,
+                p: (node.sims() / t_sims)
             });
         }
         return policy;

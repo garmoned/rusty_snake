@@ -192,16 +192,6 @@ impl Agent {
             config: MonteCarloConfig::default(),
         }
     }
-    pub fn get_move(&self, board: Board) -> (i32, i32) {
-        let starting_snake = board.get_snake(&self.starting_snake_id);
-        let mut tree = Tree::new(
-            self.config.clone(),
-            board.clone(),
-            starting_snake.clone(),
-        );
-        tree.get_best_move()
-    }
-
     pub fn get_best_move_with_policy(
         &self,
         board: Board,
