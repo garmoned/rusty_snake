@@ -1,8 +1,9 @@
+use candle_nn::AdamW;
 use rand::random;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use std::sync::mpsc::channel;
+use std::sync::Arc;
 use std::usize;
 use std::{collections::HashMap, fs};
 
@@ -272,6 +273,9 @@ pub struct Trainer {
     //
     // This should be an interface so we can train different models.
     model: MultiOutputModel,
+
+    // Optimiser to be used throughout the entire RL training process.
+    optimiser: AdamW,
 }
 
 impl Trainer {
@@ -298,13 +302,17 @@ impl Trainer {
             }
         }
 
+        let training_model = MultiOutputModel::new().unwrap();
+        let optimiser = training_model.get_optimizer().unwrap();
+
         Self {
             agents: agent,
             move_logger: MoveLogger::new(),
             config: config,
             init_board: board.clone(),
             // We should clean up these unwraps.
-            model: MultiOutputModel::new().unwrap(),
+            model: training_model,
+            optimiser: optimiser,
         }
     }
 
@@ -314,7 +322,9 @@ impl Trainer {
         {
             println!("Skipping model training, in dryrun mode");
         }
-        self.model.train(&self.move_logger.current_batch).unwrap();
+        self.model
+            .train(&self.move_logger.current_batch, &mut self.optimiser)
+            .unwrap();
         println!("Training run finished");
         let r = self.model.save_weights("./data/models/basic.safetensor");
         match r {

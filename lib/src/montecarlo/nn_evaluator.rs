@@ -113,6 +113,10 @@ impl CommonModel {
         self.var_map.save(path)
     }
 
+    fn get_optimizer(&self) -> Result<AdamW, candle_core::error::Error> {
+        return AdamW::new_lr(self.var_map.all_vars(), 0.0001);
+    }
+
     fn common_forward(
         &self,
         x: &Tensor,
@@ -132,9 +136,9 @@ impl CommonModel {
         &self,
         data: &Vec<MoveLog>,
         units: Vec<&dyn ModelUnit>,
+        optimiser: &mut AdamW,
     ) -> Result<(), candle_core::error::Error> {
         println!("Training on batch size {} ", data.len());
-        let mut optimiser = AdamW::new_lr(self.var_map.all_vars(), 0.0001)?;
         let chunk_size = 256;
         println!("Training on breaking batch into chunks of {} ", chunk_size);
 
@@ -325,13 +329,18 @@ impl MultiOutputModel {
         self.value_unit.forward(x, &self.common)
     }
 
+    pub fn get_optimizer(&self) -> Result<AdamW, error::Error> {
+        self.common.get_optimizer()
+    }
+
     pub fn train(
         &self,
         data: &Vec<MoveLog>,
+        optimiser: &mut AdamW,
     ) -> Result<(), candle_core::error::Error> {
         let units: Vec<&dyn ModelUnit> =
             vec![&self.policy_unit, &self.value_unit];
-        self.common.train(data, units)?;
+        self.common.train(data, units, optimiser)?;
         Ok(())
     }
 }
