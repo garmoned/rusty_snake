@@ -1,21 +1,19 @@
-use candle_nn::AdamW;
-use rand::random;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use serde::{Deserialize, Serialize};
-use std::sync::mpsc::channel;
-use std::sync::Arc;
-use std::usize;
-use std::{collections::HashMap, fs};
-
 use crate::config::Evaluator;
 use crate::montecarlo::evaulator::MovePolicy;
-use crate::montecarlo::nn_evaluator::NNEvaulator;
 use crate::utils;
 use crate::{
     config::MonteCarloConfig,
     models::Board,
     montecarlo::{nn_evaluator::MultiOutputModel, tree::Tree},
 };
+use candle_nn::AdamW;
+use rand::random;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
+use std::sync::mpsc::channel;
+use std::usize;
+use std::{collections::HashMap, fs};
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct MoveLog {
@@ -24,7 +22,7 @@ pub struct MoveLog {
     // The resulting board state.
     pub board: Board,
     // The player who won from this board state.
-    pub winner: String,
+    pub winner: Option<String>,
     // Calculated policy prediction for each move.
     pub policy: Vec<MovePolicy>,
 }
@@ -38,13 +36,16 @@ pub enum Dir {
 impl MoveLog {
     // Returns the index of the winner if found, otherwise None.
     pub fn get_winner_index(&self) -> Option<u32> {
-        for (idx, bs) in self.board.snakes.iter().enumerate() {
-            if bs.id == self.winner {
-                return Some(idx as u32);
-            }
+        match &self.winner {
+            Some(id) => self
+                .board
+                .snakes
+                .iter()
+                .enumerate()
+                .find(|(_, bs)| bs.id == *id)
+                .map(|(idx, _)| idx as u32),
+            None => None,
         }
-        // If the winner is not found, return None.
-        return None;
     }
 
     fn find_policy(&self, dir: (i32, i32)) -> f64 {
@@ -92,36 +93,41 @@ impl Iterator for DataIterator {
     }
 }
 
+const RB_SIZE: usize = 50_000;
+
 struct MoveLogger {
-    current_batch: Vec<MoveLog>,
     current_game: Vec<MoveLog>,
-    batch_number: usize,
     winners: HashMap<String, f32>,
     games_played: f32,
+    buffer: VecDeque<MoveLog>,
 }
 
 impl MoveLogger {
     pub fn new() -> MoveLogger {
         Self {
-            current_batch: vec![],
             current_game: vec![],
-            batch_number: 0,
             winners: HashMap::new(),
             games_played: 0.0,
+            buffer: VecDeque::new(),
         }
+    }
+
+    pub fn get_move_view(&mut self) -> &mut [MoveLog] {
+        self.buffer.make_contiguous()
     }
 
     // Used to merge two move loggers together after.
     // Used to merge batches together after running lots of simulations
-    pub fn merge(&mut self, other: &MoveLogger) {
-        self.current_batch.extend(other.current_batch.clone());
-        self.current_game.extend(other.current_game.clone());
+    pub fn merge(&mut self, other: MoveLogger) {
+        if self.current_game.len() > 0 {
+            panic!("Should not be merging with a game in progress");
+        }
         self.games_played += other.games_played;
-
         for (winner, times) in &other.winners {
             let times = times + self.winners.get(winner).unwrap_or(&0.0);
             self.winners.insert(winner.to_owned(), times);
         }
+        self.push_to_buffer(other.buffer.into());
     }
 
     pub fn log_move(
@@ -133,26 +139,33 @@ impl MoveLogger {
         self.current_game.push(MoveLog {
             player: player.to_string(),
             board: board.clone(),
-            winner: "".to_string(),
+            winner: None,
             policy: policy,
         });
     }
 
     pub fn log_win(&mut self, winner: &str) {
         for mv in &mut self.current_game {
-            mv.winner = winner.to_string();
-            self.current_batch.push(mv.clone());
+            mv.winner = Some(winner.to_string());
         }
-        self.current_game.clear();
-        let init = self.winners.get(winner).unwrap_or(&0.0) + 1.0;
-        self.winners.insert(winner.to_owned(), init);
+        self.winners.insert(
+            winner.to_owned(),
+            self.winners.get(winner).unwrap_or(&0.0) + 1.0,
+        );
+        let game = std::mem::take(&mut self.current_game);
+        self.push_to_buffer(game);
         self.games_played += 1.0;
     }
 
-    pub fn finish_game(&mut self) {
-        for mv in &mut self.current_game {
-            self.current_batch.push(mv.clone());
+    // Should push to the buffer and push off older moves if the buffer is full.
+    fn push_to_buffer(&mut self, vec: Vec<MoveLog>) {
+        self.buffer.extend(vec);
+        while self.buffer.len() > RB_SIZE {
+            self.buffer.pop_front();
         }
+    }
+
+    pub fn log_tie(&mut self) {
         self.current_game.clear();
         self.games_played += 1.0;
     }
@@ -167,11 +180,6 @@ impl MoveLogger {
                 (wins / self.games_played) * 100.0
             )
         }
-    }
-
-    pub fn clear_all(&mut self) {
-        self.current_batch.clear();
-        self.current_game.clear();
     }
 }
 
@@ -219,12 +227,6 @@ pub enum RunMode {
     //
     // Default mode.
     Train,
-    // Runs without training between batches.
-    // Only generates move data.
-    DryRun,
-    // Runs using the saved data from a previous run.
-    Offline,
-
     // Runs the neural net montecarlo against a pure monte carlo.
     BenchMark,
 }
@@ -234,8 +236,6 @@ impl std::str::FromStr for RunMode {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "train" => Ok(RunMode::Train),
-            "dry_run" => Ok(RunMode::DryRun),
-            "offline" => Ok(RunMode::Offline),
             "bench_mark" => Ok(RunMode::BenchMark),
             _ => Err(format!("Invalid RunMode: {}", s)),
         }
@@ -279,7 +279,10 @@ pub struct Trainer {
 }
 
 impl Trainer {
-    pub fn new(board: &Board, config: TrainerConfig) -> Self {
+    pub fn new(
+        board: &Board,
+        config: TrainerConfig,
+    ) -> Result<Self, candle_core::error::Error> {
         let mut agent = vec![];
 
         if config.run_mode == RunMode::BenchMark {
@@ -302,10 +305,10 @@ impl Trainer {
             }
         }
 
-        let training_model = MultiOutputModel::new().unwrap();
-        let optimiser = training_model.get_optimizer().unwrap();
+        let training_model = MultiOutputModel::new()?;
+        let optimiser = training_model.get_optimizer()?;
 
-        Self {
+        Ok(Self {
             agents: agent,
             move_logger: MoveLogger::new(),
             config: config,
@@ -313,27 +316,14 @@ impl Trainer {
             // We should clean up these unwraps.
             model: training_model,
             optimiser: optimiser,
-        }
+        })
     }
 
-    fn train(&mut self) {
-        if self.config.run_mode == RunMode::DryRun
-            || self.config.run_mode == RunMode::BenchMark
-        {
-            println!("Skipping model training, in dryrun mode");
-        }
-        self.model
-            .train(&self.move_logger.current_batch, &mut self.optimiser)
-            .unwrap();
+    fn train(&mut self) -> Result<(), candle_core::error::Error> {
+        let mut buffer_view = self.move_logger.get_move_view();
+        self.model.train(&mut buffer_view, &mut self.optimiser)?;
         println!("Training run finished");
-        let r = self.model.save_weights("./data/models/basic.safetensor");
-        match r {
-            Ok(_) => println!("Model saved successfully"),
-            Err(err) => {
-                println!("Model failed to save: {:?}", err);
-            }
-        };
-        self.move_logger.clear_all();
+        self.model.save_weights("./data/models/basic.safetensor")
     }
 
     fn play_game(&self, move_logger: &mut MoveLogger) {
@@ -362,7 +352,7 @@ impl Trainer {
             }
             crate::board::EndState::Tie => {
                 println!("Ended in a tie");
-                move_logger.finish_game();
+                move_logger.log_tie()
             }
         }
     }
@@ -375,15 +365,15 @@ impl Trainer {
             |s, _| {
                 let mut move_logger = MoveLogger::new();
                 self.play_game(&mut move_logger);
-                s.send(move_logger).unwrap();
+                let _ = s.send(move_logger);
             },
         );
         for logs in reciever.into_iter() {
-            self.move_logger.merge(&logs);
+            self.move_logger.merge(logs);
         }
         println!(
-            "Finished playing batch {} with {} games played",
-            self.move_logger.batch_number, self.move_logger.games_played
+            "Finished self play with {} total games played",
+            self.move_logger.games_played
         );
     }
 
@@ -391,7 +381,7 @@ impl Trainer {
         for _ in 0..self.config.batches {
             self.play_batch();
             // Train on the move data collected during the batch.
-            self.train();
+            let _ = self.train();
         }
     }
 
@@ -405,8 +395,6 @@ impl Trainer {
     pub fn run(&mut self) {
         match self.config.run_mode {
             RunMode::Train => self.online_train(),
-            RunMode::DryRun => self.online_train(),
-            RunMode::Offline => self.train(),
             RunMode::BenchMark => self.bench_mark(),
         }
     }

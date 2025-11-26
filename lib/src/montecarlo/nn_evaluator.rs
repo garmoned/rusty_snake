@@ -34,7 +34,7 @@ trait ModelUnit {
         x: &Tensor,
         common_model: &CommonModel,
     ) -> Result<Tensor, candle_core::error::Error>;
-    fn label_batch(&self, logs: &[&MoveLog]) -> Tensor;
+    fn label_batch(&self, logs: &[MoveLog]) -> Tensor;
     fn loss_fn(
         &self,
         inference: &Tensor,
@@ -134,7 +134,7 @@ impl CommonModel {
 
     fn train(
         &self,
-        data: &Vec<MoveLog>,
+        data: &mut [MoveLog],
         units: Vec<&dyn ModelUnit>,
         optimiser: &mut AdamW,
     ) -> Result<(), candle_core::error::Error> {
@@ -142,11 +142,10 @@ impl CommonModel {
         let chunk_size = 256;
         println!("Training on breaking batch into chunks of {} ", chunk_size);
 
-        let mut data: Vec<&MoveLog> = data.iter().map(|unit| unit).collect();
         data.shuffle(&mut thread_rng());
 
         for batch in data.chunks(chunk_size) {
-            let boards = batch.iter().map(|l| return &l.board).collect();
+            let boards = batch.iter().map(|l| &l.board).collect();
             let batch_tensor =
                 NNEvaulator::generate_input_tensor_batch(&boards);
             let batch_tensor = batch_tensor.to_device(&self.device)?;
@@ -237,7 +236,7 @@ impl ModelUnit for PolicyUnit {
         Ok(x)
     }
 
-    fn label_batch(&self, logs: &[&MoveLog]) -> Tensor {
+    fn label_batch(&self, logs: &[MoveLog]) -> Tensor {
         let mut tensors = vec![];
         for log in logs {
             tensors.push(self.label_fn(log));
@@ -270,7 +269,7 @@ impl ModelUnit for ValueUnit {
         Ok(x)
     }
 
-    fn label_batch(&self, logs: &[&MoveLog]) -> Tensor {
+    fn label_batch(&self, logs: &[MoveLog]) -> Tensor {
         let mut tensors = vec![];
         for log in logs {
             tensors.push(self.label_fn(log));
@@ -335,7 +334,7 @@ impl MultiOutputModel {
 
     pub fn train(
         &self,
-        data: &Vec<MoveLog>,
+        data: &mut [MoveLog],
         optimiser: &mut AdamW,
     ) -> Result<(), candle_core::error::Error> {
         let units: Vec<&dyn ModelUnit> =

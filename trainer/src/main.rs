@@ -22,6 +22,6 @@ fn main() {
     };
 
     let board = get_board();
-    let mut trainer = Trainer::new(&board.board, config);
-    trainer.run();
+    let trainer = Trainer::new(&board.board, config);
+    trainer.unwrap().run();
 }
