@@ -1,6 +1,6 @@
 use super::tree::{Dir, SnakeTracker};
 use crate::models::Board;
-use crate::montecarlo::evaulator::{ Evaluator, MovePolicy};
+use crate::montecarlo::evaulator::{Evaluator, MovePolicy};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -14,10 +14,6 @@ pub(crate) struct NodeState {
 
     // The snake who is about to make a move.
     pub(crate) current_snake: String,
-
-    // The snake who just acted.
-    pub(crate) snake_who_moved: String,
-
     // The direction just moved in.
     pub(crate) taken_dir: Dir,
 
@@ -42,7 +38,6 @@ impl NodeState {
         snake_tracker: Rc<SnakeTracker>,
         evaulator: Arc<Mutex<dyn Evaluator>>,
     ) -> Self {
-        let snake_who_moved = snake_tracker.get_prev_snake(&current_snake);
         NodeState {
             taken_dir: (1, 0),
             current_snake,
@@ -51,7 +46,6 @@ impl NodeState {
             parent: None,
             children: vec![],
             board_state,
-            snake_who_moved: snake_who_moved.to_owned(),
             snake_tracker: snake_tracker,
             evaulator: evaulator,
             policy_pred: 1.0,
@@ -61,7 +55,6 @@ impl NodeState {
     pub fn new_child(
         board_state: Board,
         current_snake: String,
-        snake_who_moved: String,
         snake_tracker: Rc<SnakeTracker>,
         taken_dir: Dir,
         evaulator: Arc<Mutex<dyn Evaluator>>,
@@ -72,7 +65,6 @@ impl NodeState {
             sims: 0,
             wins: 0,
             taken_dir,
-            snake_who_moved,
             parent: None,
             children: vec![],
             board_state,
@@ -120,7 +112,6 @@ impl NodeState {
             children.push(NodeState::new_child(
                 new_board,
                 next_snake.to_string(),
-                self.current_snake.clone(),
                 snake_tracker.clone(),
                 dir,
                 self.evaulator.clone(),
@@ -143,7 +134,9 @@ impl NodeState {
     }
 
     pub fn back_prop(&mut self, winner: &str) {
-        if self.snake_who_moved == winner {
+        // The win should be awarded to the player who performed the move that led to this board state.
+        // Not the player whose turn it is to move since they haven't actually impacted the game state yet.
+        if self.snake_tracker.get_prev_snake(&self.current_snake) == winner {
             self.wins += 1;
         }
         self.sims += 1;
@@ -186,11 +179,6 @@ impl NodeState {
             * NodeState::C
             * self.policy_pred;
         let reward = self.wins() / self.sims();
-        return reward + discover + self.heuristic();
-    }
-
-    pub fn heuristic(&self) -> f64 {
-        self.board_state.get_snake(&self.snake_who_moved).body.len() as f64
-            / (self.sims() + 1.0)
+        return reward + discover;
     }
 }
