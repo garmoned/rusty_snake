@@ -1,5 +1,5 @@
-use crate::config::Evaluator;
-use crate::montecarlo::evaulator::MovePolicy;
+use crate::montecarlo::evaulator::{Evaluator, MovePolicy};
+use crate::montecarlo::nn_evaluator::NNEvaulator;
 use crate::utils;
 use crate::{
     config::MonteCarloConfig,
@@ -12,6 +12,8 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::sync::mpsc::channel;
+use std::sync::Arc;
+use std::sync::Mutex;
 use std::usize;
 use std::{collections::HashMap, fs};
 
@@ -183,27 +185,67 @@ impl MoveLogger {
     }
 }
 
-struct Agent {
+struct NNAgent {
+    starting_snake_id: String,
+    config: MonteCarloConfig,
+    evaulator: Arc<Mutex<dyn Evaluator>>,
+}
+
+impl NNAgent {
+    pub fn new(snake: String, evaulator: Arc<Mutex<dyn Evaluator>>) -> Self {
+        let config = MonteCarloConfig::default();
+        Self {
+            starting_snake_id: snake.clone(),
+            config: config,
+            evaulator,
+        }
+    }
+}
+
+unsafe impl Sync for NNAgent {}
+
+unsafe impl Send for NNAgent {}
+
+impl Agent for NNAgent {
+    fn id(&self) -> &str {
+        return &self.starting_snake_id;
+    }
+
+    fn get_best_move_with_policy(
+        &self,
+        board: Board,
+    ) -> ((i32, i32), Vec<MovePolicy>) {
+        let starting_snake = board.get_snake(&self.starting_snake_id);
+        let mut tree = Tree::new_with_evaulator(
+            self.config.clone(),
+            board.clone(),
+            starting_snake.clone(),
+            self.evaulator.clone(),
+        );
+        tree.get_best_move_with_policy()
+    }
+}
+
+struct BasicAgent {
     starting_snake_id: String,
     config: MonteCarloConfig,
 }
 
-impl Agent {
-    pub fn new_nn(snake: String) -> Self {
-        let mut config = MonteCarloConfig::default();
-        config.evaulator = Evaluator::NEURAL;
-        Self {
-            starting_snake_id: snake.clone(),
-            config: config,
-        }
-    }
+impl BasicAgent {
     pub fn new(snake: String) -> Self {
         Self {
             starting_snake_id: snake.clone(),
             config: MonteCarloConfig::default(),
         }
     }
-    pub fn get_best_move_with_policy(
+}
+
+impl Agent for BasicAgent {
+    fn id(&self) -> &str {
+        return &self.starting_snake_id;
+    }
+
+    fn get_best_move_with_policy(
         &self,
         board: Board,
     ) -> ((i32, i32), Vec<MovePolicy>) {
@@ -215,10 +257,14 @@ impl Agent {
         );
         tree.get_best_move_with_policy()
     }
+}
 
-    pub fn id(&self) -> &str {
-        return &self.starting_snake_id;
-    }
+trait Agent: Sync + Send {
+    fn id(&self) -> &str;
+    fn get_best_move_with_policy(
+        &self,
+        board: Board,
+    ) -> ((i32, i32), Vec<MovePolicy>);
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, Hash, PartialEq, Eq)]
@@ -258,7 +304,7 @@ pub struct TrainerConfig {
 pub struct Trainer {
     // The configured agents.
     // Will eventually hold a shared reference to the model being trained.
-    agents: Vec<Agent>,
+    agents: Vec<Box<dyn Agent + Sync + Send>>,
 
     // Stores the moves to be trained on between batches.
     move_logger: MoveLogger,
@@ -276,14 +322,21 @@ pub struct Trainer {
 
     // Optimiser to be used throughout the entire RL training process.
     optimiser: AdamW,
+
+    // The shared nn evaluator used by multiple agents.
+    evaluator: Arc<Mutex<NNEvaulator>>,
 }
+
+pub struct GameRun {}
 
 impl Trainer {
     pub fn new(
         board: &Board,
         config: TrainerConfig,
     ) -> Result<Self, candle_core::error::Error> {
-        let mut agent = vec![];
+        let mut agent: Vec<Box<dyn Agent + Sync + Send>> = vec![];
+
+        let evaulator = Arc::new(Mutex::new(NNEvaulator::new().unwrap()));
 
         if config.run_mode == RunMode::BenchMark {
             for (i, snake) in board.snakes.iter().enumerate() {
@@ -293,20 +346,36 @@ impl Trainer {
                         "Snake with id {} using neural network",
                         snake.id.clone()
                     );
-                    agent.push(Agent::new_nn(snake.id.clone()));
+                    agent.push(Box::from(NNAgent::new(
+                        snake.id.clone(),
+                        evaulator.clone(),
+                    )));
                 } else {
-                    agent.push(Agent::new(snake.id.clone()));
+                    agent.push(Box::from(BasicAgent::new(snake.id.clone())));
                 }
             }
         } else {
             // When training run with a full neural network for self play on both sides.
             for snake in &board.snakes {
-                agent.push(Agent::new_nn(snake.id.clone()));
+                agent.push(Box::from(NNAgent::new(
+                    snake.id.clone(),
+                    evaulator.clone(),
+                )));
             }
         }
 
         let training_model = MultiOutputModel::new()?;
         let optimiser = training_model.get_optimizer()?;
+
+        let weight_path =
+            std::path::Path::new("./data/models/basic.safetensor");
+        if weight_path.exists() {
+            evaulator
+                .lock()
+                .unwrap()
+                .load_weights(weight_path.to_str().unwrap())
+                .unwrap();
+        }
 
         Ok(Self {
             agents: agent,
@@ -316,6 +385,7 @@ impl Trainer {
             // We should clean up these unwraps.
             model: training_model,
             optimiser: optimiser,
+            evaluator: evaulator,
         })
     }
 
@@ -323,7 +393,13 @@ impl Trainer {
         let mut buffer_view = self.move_logger.get_move_view();
         self.model.train(&mut buffer_view, &mut self.optimiser)?;
         println!("Training run finished");
-        self.model.save_weights("./data/models/basic.safetensor")
+        self.model.save_weights("./data/models/basic.safetensor")?;
+
+        // After a full training run - reload all of the NN evaluators off of the saved weights.
+        self.evaluator
+            .lock()
+            .unwrap()
+            .load_weights("./data/models/basic.safetensor")
     }
 
     fn play_game(&self, move_logger: &mut MoveLogger) {

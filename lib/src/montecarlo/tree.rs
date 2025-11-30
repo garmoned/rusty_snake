@@ -2,6 +2,8 @@ use rand::seq::SliceRandom;
 use std::{
     collections::HashMap,
     rc::Rc,
+    sync::Arc,
+    sync::Mutex,
     time::{Duration, Instant},
 };
 
@@ -58,6 +60,26 @@ impl SnakeTracker {
 }
 
 impl Tree {
+    pub fn new_with_evaulator(
+        config: MonteCarloConfig,
+        mut starting_board: Board,
+        starting_snake: Battlesnake,
+        evaluator: Arc<Mutex<dyn Evaluator>>,
+    ) -> Self {
+        let starting_snake_id = starting_snake.id.clone();
+        utils::fix_snake_order(&mut starting_board, starting_snake);
+        let snake_tracker = Rc::from(SnakeTracker::new(&starting_board));
+        return Self {
+            max_duration: config.max_duration,
+            root: NodeState::new(
+                starting_board,
+                starting_snake_id.clone(),
+                snake_tracker,
+                evaluator,
+            ),
+        };
+    }
+
     pub fn new(
         config: MonteCarloConfig,
         mut starting_board: Board,
@@ -69,8 +91,8 @@ impl Tree {
         // This can now be potentially swapped out with a neural network evaluator.
         let evaluator = match config.evaulator {
             crate::config::Evaluator::RANDOM => {
-                Rc::from(RREvaulator::new(snake_tracker.clone()))
-                    as Rc<dyn Evaluator>
+                Arc::from(Mutex::from(RREvaulator::new(snake_tracker.clone())))
+                    as Arc<Mutex<dyn Evaluator>>
             }
             crate::config::Evaluator::NEURAL => {
                 let mut nn = NNEvaulator::new().unwrap();
@@ -79,7 +101,7 @@ impl Tree {
                 if weight_path.exists() {
                     nn.load_weights(weight_path.to_str().unwrap()).unwrap();
                 }
-                Rc::from(nn) as Rc<dyn Evaluator>
+                Arc::from(Mutex::from(nn)) as Arc<Mutex<dyn Evaluator>>
             }
         };
         return Self {
@@ -141,7 +163,7 @@ impl Tree {
             policy.push(MovePolicy {
                 dir: node.taken_dir,
                 // Normalize all of the probabilities.
-                p: (node.sims() / t_sims)
+                p: (node.sims() / t_sims),
             });
         }
         return policy;

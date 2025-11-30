@@ -1,7 +1,9 @@
 use super::tree::{Dir, SnakeTracker};
 use crate::models::Board;
-use crate::montecarlo::evaulator::{Evaluator, MovePolicy};
+use crate::montecarlo::evaulator::{ Evaluator, MovePolicy};
 use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::Mutex;
 
 #[derive(Clone)]
 pub(crate) struct NodeState {
@@ -26,7 +28,7 @@ pub(crate) struct NodeState {
     // Too lazy to do ownership stuff for just a helper object.
     snake_tracker: Rc<SnakeTracker>,
     // Shared reference to an evaluator used by all nodes.
-    evaulator: Rc<dyn Evaluator>,
+    evaulator: Arc<Mutex<dyn Evaluator>>,
 
     policy_pred: f64,
 }
@@ -38,7 +40,7 @@ impl NodeState {
         board_state: Board,
         current_snake: String,
         snake_tracker: Rc<SnakeTracker>,
-        evaulator: Rc<dyn Evaluator>,
+        evaulator: Arc<Mutex<dyn Evaluator>>,
     ) -> Self {
         let snake_who_moved = snake_tracker.get_prev_snake(&current_snake);
         NodeState {
@@ -62,7 +64,7 @@ impl NodeState {
         snake_who_moved: String,
         snake_tracker: Rc<SnakeTracker>,
         taken_dir: Dir,
-        evaulator: Rc<dyn Evaluator>,
+        evaulator: Arc<Mutex<dyn Evaluator>>,
         policy_pred: f64,
     ) -> Self {
         NodeState {
@@ -93,14 +95,22 @@ impl NodeState {
         return 0.0;
     }
 
+    fn get_policy(&self) -> Vec<MovePolicy> {
+        let lock = self.evaulator.lock().unwrap();
+        lock.predict_best_moves(&self.board_state, &self.current_snake)
+    }
+
+    fn predict_winner(&self) -> String {
+        let lock = self.evaulator.lock().unwrap();
+        lock.predict_winner(&self.board_state, &self.current_snake)
+    }
+
     pub fn expand(&mut self) {
         if self.board_state.is_terminal() {
             return;
         }
         let mut children = vec![];
-        let policy_prediction = self
-            .evaulator
-            .predict_best_moves(&self.board_state, &self.current_snake);
+        let policy_prediction = self.get_policy();
         for dir in self.board_state.get_valid_moves(&self.current_snake) {
             let mut new_board = self.board_state.clone();
             new_board.execute_dir(&self.current_snake, dir);
@@ -128,9 +138,7 @@ impl NodeState {
     }
 
     pub fn play_out(&mut self) {
-        let winner = self
-            .evaulator
-            .predict_winner(&self.board_state, &self.current_snake);
+        let winner = self.predict_winner();
         self.back_prop(&winner);
     }
 
