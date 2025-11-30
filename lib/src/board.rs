@@ -64,13 +64,6 @@ impl Board {
             let mut coord = Coord::default();
             coord.x = head.x + dir.1;
             coord.y = head.y + dir.0;
-            if !coord.in_bounds(self.width(), self.height()) {
-                continue;
-            }
-            if self.intersect_any_snake_body(&coord, snake_id, snake.body.len())
-            {
-                continue;
-            }
             dirs.push(dir)
         }
         if dirs.is_empty() {
@@ -139,7 +132,7 @@ impl Board {
             for bod in &snake.body {
                 let mut icon = "#";
                 if bod.intersect(&snake.head) {
-                    icon = "@"
+                    icon = &snake.id.get(0..1).unwrap();
                 }
                 if bod.in_bounds(
                     self.width.try_into().unwrap(),

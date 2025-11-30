@@ -525,7 +525,6 @@ impl Evaluator for NNEvaulator {
 mod test {
 
     use core::f32;
-    use std::path;
 
     use crate::test_utils::scenarios::{
         get_board, get_scenario, AVOID_DEATH_ADVANCED, AVOID_DEATH_GET_FOOD,
@@ -613,6 +612,8 @@ mod test {
         let game_state = get_scenario(AVOID_DEATH_GET_FOOD);
         let mut evaulator = NNEvaulator::new()?;
 
+        print!("Board -\n {}", game_state.board.to_string());
+
         let weights = std::path::Path::new("../data/models/basic.safetensor");
 
         if weights.exists() {
@@ -624,6 +625,10 @@ mod test {
 
         let best_move = moves.iter().max_by(|m1, m2| m1.p.total_cmp(&m2.p));
         let best_move = dir_to_string(best_move.unwrap().dir);
+
+        for m in &moves {
+            println!("{} - {:?}", dir_to_string(m.dir), m.p)
+        }
 
         assert_eq!(best_move, "right");
 
