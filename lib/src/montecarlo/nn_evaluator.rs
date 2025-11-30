@@ -133,8 +133,8 @@ impl CommonModel {
         let x = x.relu()?;
         let x = self.ln_norm.forward(&x)?;
 
-        // X should now be in the shape of BATCH * 64000 + 4.
-        println!("Input scalars - {:?}", scalars);
+        // X should now be in the shape of BATCH * 6400 + 4 to include
+        // the secondary scalar input.
         let x = candle_core::Tensor::cat(&[x, scalars], 1)?;
         let x = self.ln1.forward(&x)?.relu()?;
         Ok(x)
