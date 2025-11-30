@@ -1,6 +1,7 @@
 use core::f32;
 
 use candle_core::error;
+use candle_core::scalar;
 use candle_core::DType;
 use candle_core::Device;
 use candle_core::Tensor;
@@ -32,6 +33,7 @@ trait ModelUnit {
     fn forward(
         &self,
         x: &Tensor,
+        scalar: Tensor,
         common_model: &CommonModel,
     ) -> Result<Tensor, candle_core::error::Error>;
     fn label_batch(&self, logs: &[MoveLog]) -> Tensor;
@@ -72,8 +74,8 @@ impl CommonModel {
 
         let ln_norm = candle_nn::layer_norm(6400, 1e-5, vb.pp("ln_norm"))?;
 
-        // Output matrix size 6400 = |batch|x64x(14-4)x(14-4);
-        let ln1 = linear(6400, 200, vb.pp("ln1"))?;
+        // Output matrix size 6400 = |batch|x64x(14-4)x(14-4) + 4 input scalar dimension.
+        let ln1 = linear(6404, 200, vb.pp("ln1"))?;
 
         // The out dimensions correspond to -
         //
@@ -120,6 +122,8 @@ impl CommonModel {
     fn common_forward(
         &self,
         x: &Tensor,
+        // In the form Batch X Scalars.
+        scalars: Tensor,
     ) -> Result<Tensor, candle_core::error::Error> {
         let x = self.cv1.forward(&x)?;
         let x = x.relu()?;
@@ -128,6 +132,10 @@ impl CommonModel {
         let x = x.flatten(1, x.dims().len() - 1)?;
         let x = x.relu()?;
         let x = self.ln_norm.forward(&x)?;
+
+        // X should now be in the shape of BATCH * 64000 + 4.
+        println!("Input scalars - {:?}", scalars);
+        let x = candle_core::Tensor::cat(&[x, scalars], 1)?;
         let x = self.ln1.forward(&x)?.relu()?;
         Ok(x)
     }
@@ -153,7 +161,12 @@ impl CommonModel {
             let mut loss: Option<Tensor> = None;
 
             for unit in units.as_slice() {
-                let inference = unit.forward(&batch_tensor, &self)?;
+                let batch_scalar =
+                    NNEvaulator::generate_input_scalar_batch(&boards)
+                        .to_device(&self.device)?;
+
+                let inference =
+                    unit.forward(&batch_tensor, batch_scalar, &self)?;
                 let targets = unit.label_batch(&batch);
                 let local_loss = unit.loss_fn(&inference, &targets)?;
                 match loss {
@@ -226,9 +239,10 @@ impl ModelUnit for PolicyUnit {
     fn forward(
         &self,
         x: &Tensor,
+        scalars: Tensor,
         common_model: &CommonModel,
     ) -> Result<Tensor, candle_core::error::Error> {
-        let x = common_model.common_forward(x)?;
+        let x = common_model.common_forward(x, scalars)?;
         let x = common_model.pn.forward(&x)?;
 
         // Apply softmax so that all outcomes are scaled to sum to 1.
@@ -260,9 +274,10 @@ impl ModelUnit for ValueUnit {
     fn forward(
         &self,
         x: &Tensor,
+        scalars: Tensor,
         common_model: &CommonModel,
     ) -> Result<Tensor, candle_core::error::Error> {
-        let x = common_model.common_forward(x)?;
+        let x = common_model.common_forward(x, scalars)?;
         let x = common_model.vn.forward(&x)?;
         // Apply tanh so that the value will fall between [-1,1]
         let x = x.tanh()?;
@@ -317,15 +332,17 @@ impl MultiOutputModel {
     pub fn policy_forward(
         &self,
         x: &Tensor,
+        scalars: Tensor,
     ) -> Result<Tensor, candle_core::error::Error> {
-        self.policy_unit.forward(x, &self.common)
+        self.policy_unit.forward(x, scalars, &self.common)
     }
 
     pub fn value_forward(
         &self,
         x: &Tensor,
+        scalars: Tensor,
     ) -> Result<Tensor, candle_core::error::Error> {
-        self.value_unit.forward(x, &self.common)
+        self.value_unit.forward(x, scalars, &self.common)
     }
 
     pub fn get_optimizer(&self) -> Result<AdamW, error::Error> {
@@ -401,8 +418,6 @@ impl NNEvaulator {
         // Generate a channel layer for each snake and their head.
         let mut channels: Vec<Tensor> = vec![];
         for snake in &board.snakes {
-            // It might be worth seeing if removing the head from the body
-            // channel is helpful.
             channels.push(NNEvaulator::one_hot_encode(&snake.body));
             let head_channel = vec![snake.head.clone()];
             channels.push(NNEvaulator::one_hot_encode(&head_channel));
@@ -410,6 +425,28 @@ impl NNEvaulator {
         // Add the food channel last.
         channels.push(NNEvaulator::one_hot_encode(&board.food));
         return Tensor::stack(&channels, 0).unwrap();
+    }
+
+    // Generates a 1D tensor in the format of
+    // [My_Length, My_Health, Enemy_Length, Enemy_Health].
+    // Will have a length of 4.
+    fn generate_scalar_inputs(board: &Board) -> Tensor {
+        let mut scalars: Vec<f32> = vec![];
+        for snake in &board.snakes {
+            // Length normalized to max length of entire board.
+            scalars.push(snake.body.len() as f32 / (11.0 * 11.0));
+            // Health normalized to max health of 100.
+            scalars.push((snake.health as f32) / 100.0);
+        }
+        return Tensor::from_vec(scalars, 4, &Device::Cpu).unwrap();
+    }
+
+    fn generate_input_scalar_batch(boards: &Vec<&Board>) -> Tensor {
+        let mut tensors = vec![];
+        for b in boards {
+            tensors.push(NNEvaulator::generate_scalar_inputs(b));
+        }
+        return Tensor::stack(&tensors, 0).unwrap();
     }
 
     fn generate_input_tensor_batch(boards: &Vec<&Board>) -> Tensor {
@@ -426,9 +463,12 @@ impl Evaluator for NNEvaulator {
         let input = NNEvaulator::generate_input_tensor_batch(&vec![board])
             .to_device(&self.model.common.device)
             .unwrap();
+        let scalars = NNEvaulator::generate_input_scalar_batch(&vec![board])
+            .to_device(&self.model.common.device)
+            .unwrap();
 
         // Output is in the format batch X value.
-        let output = self.model.value_forward(&input).unwrap();
+        let output = self.model.value_forward(&input, scalars).unwrap();
         let output = output.squeeze(0).unwrap();
         let output = output.to_vec1::<f32>().unwrap()[0];
         if output > 0.1 {
@@ -449,9 +489,12 @@ impl Evaluator for NNEvaulator {
         let input = NNEvaulator::generate_input_tensor_batch(&vec![board])
             .to_device(&self.model.common.device)
             .unwrap();
+        let scalars = NNEvaulator::generate_input_scalar_batch(&vec![board])
+            .to_device(&self.model.common.device)
+            .unwrap();
         let output = self
             .model
-            .policy_forward(&input)
+            .policy_forward(&input, scalars)
             .unwrap()
             .squeeze(0)
             .unwrap();
@@ -482,8 +525,13 @@ impl Evaluator for NNEvaulator {
 mod test {
 
     use core::f32;
+    use std::path;
 
-    use crate::test_utils::scenarios::get_board;
+    use crate::test_utils::scenarios::{
+        get_board, get_scenario, AVOID_DEATH_ADVANCED, AVOID_DEATH_GET_FOOD,
+    };
+
+    use crate::utils::dir_to_string;
 
     use super::*;
 
@@ -556,6 +604,47 @@ mod test {
                 .len()
                 == 4
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn verify_policy_layer() -> Result<(), Box<dyn std::error::Error>> {
+        let game_state = get_scenario(AVOID_DEATH_GET_FOOD);
+        let mut evaulator = NNEvaulator::new()?;
+
+        let weights = std::path::Path::new("../data/models/basic.safetensor");
+
+        if weights.exists() {
+            evaulator.load_weights("../data/models/basic.safetensor")?;
+        }
+
+        let moves =
+            evaulator.predict_best_moves(&game_state.board, &game_state.you.id);
+
+        let best_move = moves.iter().max_by(|m1, m2| m1.p.total_cmp(&m2.p));
+        let best_move = dir_to_string(best_move.unwrap().dir);
+
+        assert_eq!(best_move, "right");
+
+        Ok(())
+    }
+
+    #[test]
+    fn verify_value_layer() -> Result<(), Box<dyn std::error::Error>> {
+        let game_state = get_scenario(AVOID_DEATH_ADVANCED);
+        let mut evaulator = NNEvaulator::new()?;
+
+        let weights = std::path::Path::new("../data/models/basic.safetensor");
+
+        if weights.exists() {
+            evaulator.load_weights("../data/models/basic.safetensor")?;
+        }
+
+        let winner =
+            evaulator.predict_winner(&game_state.board, &game_state.you.id);
+
+        assert_eq!(winner, "a425095b-604b-4b67-a281-4dac219f4bee");
 
         Ok(())
     }
