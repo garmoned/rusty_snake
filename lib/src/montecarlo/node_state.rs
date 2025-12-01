@@ -1,6 +1,7 @@
 use super::tree::{Dir, SnakeTracker};
 use crate::models::Board;
 use crate::montecarlo::evaulator::{Evaluator, MovePolicy};
+use core::f64;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -27,6 +28,9 @@ pub(crate) struct NodeState {
     evaulator: Arc<Mutex<dyn Evaluator>>,
 
     policy_pred: f64,
+
+    // Whether this node state is always terminal.
+    is_solved: bool,
 }
 
 impl NodeState {
@@ -49,6 +53,7 @@ impl NodeState {
             snake_tracker: snake_tracker,
             evaulator: evaulator,
             policy_pred: 1.0,
+            is_solved: false,
         }
     }
 
@@ -71,6 +76,7 @@ impl NodeState {
             snake_tracker: snake_tracker,
             evaulator: evaulator,
             policy_pred,
+            is_solved: false,
         }
     }
 
@@ -131,6 +137,7 @@ impl NodeState {
     pub fn play_out(&mut self) {
         // Only use the evaluator if the game has not already finished.
         if self.board_state.is_terminal() {
+            self.is_solved = true;
             match self.board_state.get_endstate() {
                 crate::board::EndState::Winner(winner) => {
                     self.back_prop(&winner)
@@ -188,6 +195,26 @@ impl NodeState {
         if self.sims == 0 {
             return f64::INFINITY;
         }
+
+        // If the player who moved into this immediately lost - prune this move entirely.
+        // If the playr who moved won - always choose this node while exploring, no other moves could be better.
+        if self.is_solved {
+            let snake_who_moved =
+                self.snake_tracker.get_next_snake(&self.current_snake);
+            let winner = self.board_state.get_endstate();
+            return match winner {
+                crate::board::EndState::Winner(winner) => {
+                    if winner != snake_who_moved {
+                        f64::NEG_INFINITY
+                    } else {
+                        f64::INFINITY
+                    }
+                }
+                crate::board::EndState::Playing => panic!("should be terminal"),
+                crate::board::EndState::Tie => f64::NEG_INFINITY,
+            };
+        }
+
         let discover = ((parent_sims).ln() / (1.0 + self.sims())).sqrt()
             * NodeState::C
             * self.policy_pred;

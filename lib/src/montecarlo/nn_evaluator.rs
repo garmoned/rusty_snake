@@ -526,10 +526,10 @@ mod test {
 
     use core::f32;
 
-    use crate::config::MonteCarloConfig;
+    use crate::config::{self, MonteCarloConfig};
     use crate::montecarlo;
     use crate::test_utils::scenarios::{
-        AVOID_DEATH_ADVANCED, AVOID_HEAD_TO_HEAD_DEATH, get_board, get_scenario
+        get_board, get_scenario, AVOID_DEATH_ADVANCED, AVOID_DEATH_GET_FOOD,
     };
 
     use crate::utils::dir_to_string;
@@ -611,15 +611,18 @@ mod test {
 
     #[test]
     fn verify_policy_layer() -> Result<(), Box<dyn std::error::Error>> {
-        let game_state = get_scenario(AVOID_HEAD_TO_HEAD_DEATH);
+        let game_state = get_scenario(AVOID_DEATH_GET_FOOD);
         let mut evaulator = NNEvaulator::new()?;
 
-        print!("Board -\n {}", game_state.board.to_string());
-
+        print!("Board \n{}-\n", game_state.board.to_string());
+        println!("You - id: {}", game_state.you.id);
         let weights = std::path::Path::new("../data/models/basic.safetensor");
 
+        let mut config = MonteCarloConfig::default();
+        config.evaulator = config::Evaluator::NEURAL;
+
         let mut tree = montecarlo::tree::Tree::new(
-            MonteCarloConfig::default(),
+            config,
             game_state.board.clone(),
             game_state.board.snakes[0].clone(),
         );
@@ -634,8 +637,24 @@ mod test {
         let moves =
             evaulator.predict_best_moves(&game_state.board, &game_state.you.id);
 
-        let best_move = moves.iter().max_by(|m1, m2| m1.p.total_cmp(&m2.p));
-        let best_move = dir_to_string(best_move.unwrap().dir);
+        println!("best move for: {}", game_state.you.id);
+
+        let best_move =
+            moves.iter().max_by(|m1, m2| m1.p.total_cmp(&m2.p)).unwrap();
+
+        let mut m_board = game_state.board.clone();
+
+        m_board.execute(&game_state.you.id, best_move.dir, false);
+
+        println!("Is terminal {}", m_board.is_terminal());
+
+        println!("Winner is {:?}", m_board.get_endstate());
+
+        print!("Board \n{}-\n", m_board.to_string());
+
+        let best_move = dir_to_string(best_move.dir);
+
+        evaulator.predict_winner(&m_board, &game_state.you.id);
 
         for m in &moves {
             println!("policy move {} - {:?}", dir_to_string(m.dir), m.p)
