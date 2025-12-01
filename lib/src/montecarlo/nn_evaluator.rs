@@ -1,7 +1,6 @@
 use core::f32;
 
 use candle_core::error;
-use candle_core::scalar;
 use candle_core::DType;
 use candle_core::Device;
 use candle_core::Tensor;
@@ -68,7 +67,7 @@ impl CommonModel {
         let vb = VarBuilder::from_varmap(&var_map, DType::F32, &device);
 
         let cv1 =
-            conv2d_no_bias(5, 256, 3, Conv2dConfig::default(), vb.pp("cv1"))?;
+            conv2d_no_bias(6, 256, 3, Conv2dConfig::default(), vb.pp("cv1"))?;
         let cv2 =
             conv2d_no_bias(256, 64, 3, Conv2dConfig::default(), vb.pp("cv2"))?;
 
@@ -322,6 +321,7 @@ impl MultiOutputModel {
     ) -> Result<(), candle_core::error::Error> {
         self.common.load_weights(path)
     }
+
     pub fn save_weights(
         &self,
         path: &str,
@@ -424,6 +424,14 @@ impl NNEvaulator {
         }
         // Add the food channel last.
         channels.push(NNEvaulator::one_hot_encode(&board.food));
+        let mut walls = vec![];
+        for i in -1..=12 {
+            walls.push(Coord { x: i, y: -1 });
+            walls.push(Coord { x: -1, y: i });
+            walls.push(Coord { x: i, y: 12 });
+            walls.push(Coord { x: 12, y: i });
+        }
+        channels.push(NNEvaulator::one_hot_encode(&walls));
         return Tensor::stack(&channels, 0).unwrap();
     }
 
@@ -471,6 +479,7 @@ impl Evaluator for NNEvaulator {
         let output = self.model.value_forward(&input, scalars).unwrap();
         let output = output.squeeze(0).unwrap();
         let output = output.to_vec1::<f32>().unwrap()[0];
+        // println!("value of board {}", output);
         if output > 0.1 {
             return board.snakes[0].id.clone();
         }
@@ -566,7 +575,7 @@ mod test {
 
         let tensor = NNEvaulator::generate_input_tensor(&board.board);
 
-        assert_eq!(tensor.dims(), [5, 14, 14]);
+        assert_eq!(tensor.dims(), [6, 14, 14]);
 
         Ok(())
     }
@@ -577,7 +586,7 @@ mod test {
         let boards = vec![&board.board, &board.board];
         let tensor = NNEvaulator::generate_input_tensor_batch(&boards);
 
-        assert_eq!(tensor.dims(), [2, 5, 14, 14]);
+        assert_eq!(tensor.dims(), [2, 6, 14, 14]);
 
         Ok(())
     }
@@ -633,7 +642,6 @@ mod test {
             println!("loading existing weights");
             evaulator.load_weights("../data/models/basic.safetensor")?;
         }
-
         let moves =
             evaulator.predict_best_moves(&game_state.board, &game_state.you.id);
 
@@ -666,7 +674,7 @@ mod test {
             println!("tree move {} - {:?}", dir_to_string(m.dir), m.p)
         }
 
-        assert_eq!(best_move, "right");
+        assert_eq!(best_move, "up");
 
         Ok(())
     }
