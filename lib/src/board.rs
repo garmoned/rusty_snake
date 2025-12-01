@@ -64,6 +64,14 @@ impl Board {
             let mut coord = Coord::default();
             coord.x = head.x + dir.1;
             coord.y = head.y + dir.0;
+
+            if !coord.in_bounds(self.width(), self.height()) {
+                continue;
+            }
+            if self.intersect_any_snake_body(&coord, snake_id, snake.body.len())
+            {
+                continue;
+            }
             dirs.push(dir)
         }
         return dirs;
@@ -315,7 +323,7 @@ impl Board {
         let mut snakes_remaining = 0;
         let mut alive_snake_id = "".to_string();
         for snake in &self.snakes {
-            if snake.eliminated_cause.is_none() {
+            if self.get_valid_moves(&snake.id).len() > 0 {
                 snakes_remaining += 1;
                 alive_snake_id = snake.id.clone();
                 continue;
