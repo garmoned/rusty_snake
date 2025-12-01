@@ -56,7 +56,7 @@ impl Board {
 
         // A dead snake will stay where it is.
         if snake.is_eliminated() {
-            return vec![(0, 0)];
+            return vec![];
         }
 
         let head = &snake.head;
@@ -65,9 +65,6 @@ impl Board {
             coord.x = head.x + dir.1;
             coord.y = head.y + dir.0;
             dirs.push(dir)
-        }
-        if dirs.is_empty() {
-            dirs.push((1, 0))
         }
         return dirs;
     }

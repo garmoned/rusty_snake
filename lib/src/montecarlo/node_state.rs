@@ -129,8 +129,21 @@ impl NodeState {
     }
 
     pub fn play_out(&mut self) {
-        let winner = self.predict_winner();
-        self.back_prop(&winner);
+        // Only use the evaluator if the game has not already finished.
+        if self.board_state.is_terminal() {
+            match self.board_state.get_endstate() {
+                crate::board::EndState::Winner(winner) => {
+                    self.back_prop(&winner)
+                }
+                crate::board::EndState::Playing => {
+                    panic!("Board state should be terminal")
+                }
+                crate::board::EndState::Tie => self.back_prop("tie"),
+            }
+        } else {
+            let winner = self.predict_winner();
+            self.back_prop(&winner);
+        }
     }
 
     pub fn back_prop(&mut self, winner: &str) {

@@ -526,8 +526,10 @@ mod test {
 
     use core::f32;
 
+    use crate::config::MonteCarloConfig;
+    use crate::montecarlo;
     use crate::test_utils::scenarios::{
-        get_board, get_scenario, AVOID_DEATH_ADVANCED, AVOID_DEATH_GET_FOOD,
+        AVOID_DEATH_ADVANCED, AVOID_HEAD_TO_HEAD_DEATH, get_board, get_scenario
     };
 
     use crate::utils::dir_to_string;
@@ -609,14 +611,23 @@ mod test {
 
     #[test]
     fn verify_policy_layer() -> Result<(), Box<dyn std::error::Error>> {
-        let game_state = get_scenario(AVOID_DEATH_GET_FOOD);
+        let game_state = get_scenario(AVOID_HEAD_TO_HEAD_DEATH);
         let mut evaulator = NNEvaulator::new()?;
 
         print!("Board -\n {}", game_state.board.to_string());
 
         let weights = std::path::Path::new("../data/models/basic.safetensor");
 
+        let mut tree = montecarlo::tree::Tree::new(
+            MonteCarloConfig::default(),
+            game_state.board.clone(),
+            game_state.board.snakes[0].clone(),
+        );
+
+        let tree_moves = tree.get_best_move_with_policy();
+
         if weights.exists() {
+            println!("loading existing weights");
             evaulator.load_weights("../data/models/basic.safetensor")?;
         }
 
@@ -627,7 +638,13 @@ mod test {
         let best_move = dir_to_string(best_move.unwrap().dir);
 
         for m in &moves {
-            println!("{} - {:?}", dir_to_string(m.dir), m.p)
+            println!("policy move {} - {:?}", dir_to_string(m.dir), m.p)
+        }
+
+        println!(" ------ ");
+
+        for m in &tree_moves.1 {
+            println!("tree move {} - {:?}", dir_to_string(m.dir), m.p)
         }
 
         assert_eq!(best_move, "right");
