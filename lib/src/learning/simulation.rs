@@ -56,7 +56,7 @@ impl MoveLog {
                 return pdir.p;
             }
         }
-        return 0.0;
+        0.0
     }
 
     pub fn policy_prior(&self, dir: Dir) -> f64 {
@@ -88,10 +88,11 @@ impl Iterator for DataIterator {
                 serde_json::from_str(&fs::read_to_string(f).unwrap()).unwrap()
             })
             .collect();
-        if chunk.len() > 0 {
-            return Some(chunk);
+        if !chunk.is_empty() {
+            Some(chunk)
+        } else {
+            None
         }
-        None
     }
 }
 
@@ -208,7 +209,7 @@ unsafe impl Send for NNAgent {}
 
 impl Agent for NNAgent {
     fn id(&self) -> &str {
-        return &self.starting_snake_id;
+        &self.starting_snake_id
     }
 
     fn get_best_move_with_policy(
@@ -242,7 +243,7 @@ impl BasicAgent {
 
 impl Agent for BasicAgent {
     fn id(&self) -> &str {
-        return &self.starting_snake_id;
+        &self.starting_snake_id
     }
 
     fn get_best_move_with_policy(
@@ -416,7 +417,7 @@ impl Trainer {
                 // Log the move that was made on the board.
                 move_logger.log_move(agent.id(), &prior_board, move_p.1);
                 // Every 10 moves or so throw a food in.
-                if random::<i32>() % 10 == 0 {
+                if random::<u32>() % 10 == 0 {
                     board.add_food();
                 }
             }
