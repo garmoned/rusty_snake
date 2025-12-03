@@ -159,7 +159,7 @@ impl CommonModel {
 
             let mut loss: Option<Tensor> = None;
 
-            for unit in units.as_slice() {
+            for unit in units.as_slice() {                
                 let batch_scalar =
                     NNEvaulator::generate_input_scalar_batch(&boards)
                         .to_device(&self.device)?;
@@ -234,6 +234,33 @@ impl ValueUnit {
     }
 }
 
+
+/// Computes Cross-Entropy loss for soft targets (probability distributions).
+/// 
+/// * `logits`: The raw output from the neural network (BEFORE Softmax). Shape: [Batch, Actions]
+/// * `targets`: The MCTS probabilities (sum to 1.0). Shape: [Batch, Actions]
+pub fn soft_cross_entropy(logits: &Tensor, targets: &Tensor) -> Result<Tensor, candle_core::error::Error> {
+    // 1. Convert raw logits to Log-Probabilities
+    // This is more numerically stable than doing softmax -> log
+    let log_probs = candle_nn::ops::log_softmax(logits, 1)?;
+
+    // 2. Calculate: target * log_probs
+    // We do element-wise multiplication.
+    let weighted_log_probs = targets.mul(&log_probs)?;
+
+    // 3. Sum across the action dimension (dim 1)
+    // This gives us the negative log-likelihood for each sample in the batch.
+    let sum_across_actions = weighted_log_probs.sum(1)?;
+
+    // 4. Negate (because loss must be positive)
+    let neg_log_likelihood = sum_across_actions.neg()?;
+
+    // 5. Average across the batch dimension (dim 0) to get a scalar loss
+    let mean_loss = neg_log_likelihood.mean(0)?;
+
+    Ok(mean_loss)
+}
+
 impl ModelUnit for PolicyUnit {
     fn forward(
         &self,
@@ -244,8 +271,7 @@ impl ModelUnit for PolicyUnit {
         let x = common_model.common_forward(x, scalars)?;
         let x = common_model.pn.forward(&x)?;
 
-        // Apply softmax so that all outcomes are scaled to sum to 1.
-        let x = candle_nn::ops::log_softmax(&x, 1)?;
+        // Return raw logits (no softmax).
         Ok(x)
     }
 
@@ -262,9 +288,8 @@ impl ModelUnit for PolicyUnit {
         inference: &Tensor,
         targets: &Tensor,
     ) -> Result<Tensor, candle_core::error::Error> {
-        let loss = (targets * inference)?.sum(1)?; // Sum(Target * LogProb)
-        let loss = loss.mean(0)?;
-        let loss = loss.neg()?;
+        // Use soft cross entropy loss for policy.
+        let loss = soft_cross_entropy(inference, targets)?;
         Ok(loss)
     }
 }
@@ -467,11 +492,7 @@ impl NNEvaulator {
 }
 
 impl Evaluator for NNEvaulator {
-    fn predict_winner(&self, board: &Board, snake_id: &str) -> String {
-        let mut board = board.clone();
-        let starting_snake = board.get_snake(snake_id).clone();
-        utils::fix_snake_order(&mut board, starting_snake);
-
+    fn predict_winner(&self, board: &Board, _: &str) -> String {
         let input = NNEvaulator::generate_input_tensor_batch(&vec![&board])
             .to_device(&self.model.common.device)
             .unwrap();
@@ -497,11 +518,8 @@ impl Evaluator for NNEvaulator {
     fn predict_best_moves(
         &self,
         board: &Board,
-        snake_id: &str,
+        _: &str,
     ) -> Vec<super::evaulator::MovePolicy> {
-        let mut board = board.clone();
-        let starting_snake = board.get_snake(snake_id).clone();
-        utils::fix_snake_order(&mut board, starting_snake);
         let input = NNEvaulator::generate_input_tensor_batch(&vec![&board])
             .to_device(&self.model.common.device)
             .unwrap();
@@ -511,10 +529,10 @@ impl Evaluator for NNEvaulator {
         let output = self
             .model
             .policy_forward(&input, scalars)
-            .unwrap()
-            .squeeze(0)
             .unwrap();
-        let output = output.exp().unwrap();
+        // Apply softmax to the output to generate a probability distribution.
+        let output = candle_nn::ops::softmax(&output, 1).unwrap();
+        let output = output.squeeze(0).unwrap();
         let output = output.to_vec1::<f32>().unwrap();
         let mut policies = vec![];
         policies.push(MovePolicy {
@@ -701,6 +719,51 @@ mod test {
             evaulator.predict_winner(&game_state.board, &game_state.you.id);
 
         assert_eq!(winner, "a425095b-604b-4b67-a281-4dac219f4bee");
+
+        Ok(())
+    }
+
+    #[test]
+    fn back_prop_one_move_log() -> Result<(), Box<dyn std::error::Error>> {
+        let game_state = get_scenario(AVOID_DEATH_GET_FOOD);
+        let evaulator = NNEvaulator::new()?;
+
+        let best_moves =
+            evaulator.predict_best_moves(&game_state.board, &game_state.you.id);
+
+        let mut config = MonteCarloConfig::default();
+        config.evaulator = config::Evaluator::NEURAL;
+        let mut tree = montecarlo::tree::Tree::new(
+            config,
+            game_state.board.clone(),
+            game_state.you.clone(),
+        );
+
+        let tree_best_moves = tree.get_best_move_with_policy();
+
+        for m in &best_moves {
+            // Print out the move and policy value
+            println!("move {} - policy value {}", dir_to_string(m.dir), m.p);
+        }
+
+        println!(" ------ ");
+
+        for m in &tree_best_moves.1 {
+            // Print out the move and policy value
+            println!("tree move {} - policy value {}", dir_to_string(m.dir), m.p);
+        }
+
+        let move_log = MoveLog {
+            player: game_state.you.id.clone(),
+            board: game_state.board.clone(),
+            winner: Some(game_state.board.snakes[0].id.clone()),
+            policy: tree_best_moves.1,
+        };
+
+        evaulator.model.train(
+            &mut vec![move_log],
+            &mut evaulator.model.get_optimizer()?,
+        )?;
 
         Ok(())
     }

@@ -422,8 +422,8 @@ impl Trainer {
                     break;
                 }
 
-                // Every 10 moves or so throw a food in.
-                if random::<u32>() % 10 == 0 {
+                // Every 20 moves or so throw a food in.
+                if random::<u32>() % 20 == 0 {
                     board.add_food();
                 }
             }
