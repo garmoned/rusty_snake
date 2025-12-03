@@ -416,6 +416,12 @@ impl Trainer {
                 state = board.execute(agent.id(), move_p.0, is_last);
                 // Log the move that was made on the board.
                 move_logger.log_move(agent.id(), &prior_board, move_p.1);
+
+                // Break immediately if the game ended after this move.
+                if state.is_terminal() {
+                    break;
+                }
+
                 // Every 10 moves or so throw a food in.
                 if random::<u32>() % 10 == 0 {
                     board.add_food();
@@ -658,7 +664,10 @@ mod tests {
     #[test]
     fn test_run_mode_from_str() {
         assert_eq!("train".parse::<RunMode>().unwrap(), RunMode::Train);
-        assert_eq!("bench_mark".parse::<RunMode>().unwrap(), RunMode::BenchMark);
+        assert_eq!(
+            "bench_mark".parse::<RunMode>().unwrap(),
+            RunMode::BenchMark
+        );
         assert!("invalid".parse::<RunMode>().is_err());
     }
 
@@ -667,9 +676,9 @@ mod tests {
         let board = get_board().board;
         let snake_id = board.snakes[0].id.clone();
         let evaluator = Arc::new(Mutex::new(
-            crate::montecarlo::evaulator::RREvaulator::new(
-                std::rc::Rc::new(crate::montecarlo::tree::SnakeTracker::new(&board)),
-            ),
+            crate::montecarlo::evaulator::RREvaulator::new(std::rc::Rc::new(
+                crate::montecarlo::tree::SnakeTracker::new(&board),
+            )),
         ));
 
         let nn_agent = NNAgent::new(snake_id.clone(), evaluator);
