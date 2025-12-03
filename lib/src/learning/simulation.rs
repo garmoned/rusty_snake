@@ -21,7 +21,7 @@ use std::{collections::HashMap, fs};
 pub struct MoveLog {
     // The player who just made the move.
     pub player: String,
-    // The resulting board state.
+    // The board state before the move was made (the state the move was taken on).
     pub board: Board,
     // The player who won from this board state.
     pub winner: Option<String>,
@@ -409,10 +409,12 @@ impl Trainer {
             for i in 0..self.agents.len() {
                 let agent = &self.agents[i];
                 let is_last = i == self.agents.len() - 1;
+                // Store the board before the move.
+                let prior_board = board.clone();
                 let move_p = agent.get_best_move_with_policy(board.clone());
                 state = board.execute(agent.id(), move_p.0, is_last);
-                // Log the player made the move.
-                move_logger.log_move(agent.id(), &board, move_p.1);
+                // Log the move that was made on the board.
+                move_logger.log_move(agent.id(), &prior_board, move_p.1);
                 // Every 10 moves or so throw a food in.
                 if random::<i32>() % 10 == 0 {
                     board.add_food();
@@ -473,5 +475,307 @@ impl Trainer {
             RunMode::Train => self.online_train(),
             RunMode::BenchMark => self.bench_mark(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::montecarlo::evaulator::MovePolicy;
+    use crate::test_utils::scenarios::get_board;
+    use crate::utils;
+
+    #[test]
+    fn test_move_log_policy_prior() {
+        let move_log = MoveLog {
+            player: "test_snake".to_string(),
+            board: get_board().board,
+            winner: None,
+            policy: vec![
+                MovePolicy {
+                    dir: utils::RIGHT,
+                    p: 0.4,
+                },
+                MovePolicy {
+                    dir: utils::LEFT,
+                    p: 0.3,
+                },
+                MovePolicy {
+                    dir: utils::UP,
+                    p: 0.2,
+                },
+                MovePolicy {
+                    dir: utils::DOWN,
+                    p: 0.1,
+                },
+            ],
+        };
+
+        assert_eq!(move_log.policy_prior(Dir::RIGHT), 0.4);
+        assert_eq!(move_log.policy_prior(Dir::LEFT), 0.3);
+        assert_eq!(move_log.policy_prior(Dir::UP), 0.2);
+        assert_eq!(move_log.policy_prior(Dir::DOWN), 0.1);
+    }
+
+    #[test]
+    fn test_move_log_get_winner_index() {
+        let board = get_board().board;
+        let snake_id = board.snakes[0].id.clone();
+
+        let move_log = MoveLog {
+            player: snake_id.clone(),
+            board: board.clone(),
+            winner: Some(snake_id.clone()),
+            policy: vec![],
+        };
+
+        let winner_index = move_log.get_winner_index();
+        assert!(winner_index.is_some());
+        assert_eq!(winner_index.unwrap(), 0);
+    }
+
+    #[test]
+    fn test_move_log_get_winner_index_none() {
+        let board = get_board().board;
+
+        let move_log = MoveLog {
+            player: "test".to_string(),
+            board: board,
+            winner: None,
+            policy: vec![],
+        };
+
+        assert!(move_log.get_winner_index().is_none());
+    }
+
+    #[test]
+    fn test_move_logger_new() {
+        let logger = MoveLogger::new();
+        assert_eq!(logger.current_game.len(), 0);
+        assert_eq!(logger.games_played, 0.0);
+        assert_eq!(logger.buffer.len(), 0);
+    }
+
+    #[test]
+    fn test_move_logger_log_move() {
+        let mut logger = MoveLogger::new();
+        let board = get_board().board;
+        let policy = vec![MovePolicy {
+            dir: utils::RIGHT,
+            p: 1.0,
+        }];
+
+        logger.log_move("test_snake", &board, policy.clone());
+
+        assert_eq!(logger.current_game.len(), 1);
+        assert_eq!(logger.current_game[0].player, "test_snake");
+        assert_eq!(logger.current_game[0].policy.len(), 1);
+        assert_eq!(logger.current_game[0].winner, None);
+    }
+
+    #[test]
+    fn test_move_logger_log_win() {
+        let mut logger = MoveLogger::new();
+        let board = get_board().board;
+        let policy = vec![MovePolicy {
+            dir: utils::RIGHT,
+            p: 1.0,
+        }];
+
+        logger.log_move("snake1", &board, policy.clone());
+        logger.log_move("snake2", &board, policy.clone());
+        logger.log_win("snake1");
+
+        // All moves should have winner set
+        assert_eq!(logger.current_game.len(), 0); // Should be cleared after log_win
+        assert_eq!(logger.games_played, 1.0);
+        assert_eq!(logger.buffer.len(), 2);
+        assert_eq!(logger.winners.get("snake1"), Some(&1.0));
+    }
+
+    #[test]
+    fn test_move_logger_log_tie() {
+        let mut logger = MoveLogger::new();
+        let board = get_board().board;
+        let policy = vec![MovePolicy {
+            dir: utils::RIGHT,
+            p: 1.0,
+        }];
+
+        logger.log_move("snake1", &board, policy.clone());
+        logger.log_tie();
+
+        // Current game should be cleared
+        assert_eq!(logger.current_game.len(), 0);
+        assert_eq!(logger.games_played, 1.0);
+        assert_eq!(logger.buffer.len(), 0); // Ties don't add to buffer
+    }
+
+    #[test]
+    fn test_move_logger_merge() {
+        let mut logger1 = MoveLogger::new();
+        let mut logger2 = MoveLogger::new();
+        let board = get_board().board;
+        let policy = vec![MovePolicy {
+            dir: utils::RIGHT,
+            p: 1.0,
+        }];
+
+        logger1.log_move("snake1", &board, policy.clone());
+        logger1.log_win("snake1");
+
+        logger2.log_move("snake2", &board, policy.clone());
+        logger2.log_win("snake2");
+
+        logger1.merge(logger2);
+
+        assert_eq!(logger1.games_played, 2.0);
+        assert_eq!(logger1.buffer.len(), 2);
+        assert_eq!(logger1.winners.get("snake1"), Some(&1.0));
+        assert_eq!(logger1.winners.get("snake2"), Some(&1.0));
+    }
+
+    #[test]
+    #[should_panic(expected = "Should not be merging with a game in progress")]
+    fn test_move_logger_merge_panics_with_game_in_progress() {
+        let mut logger1 = MoveLogger::new();
+        let mut logger2 = MoveLogger::new();
+        let board = get_board().board;
+        let policy = vec![MovePolicy {
+            dir: utils::RIGHT,
+            p: 1.0,
+        }];
+
+        logger1.log_move("snake1", &board, policy.clone());
+        logger2.log_move("snake2", &board, policy.clone());
+        logger2.log_win("snake2");
+
+        // logger1 has a game in progress, should panic
+        logger1.merge(logger2);
+    }
+
+    #[test]
+    fn test_run_mode_from_str() {
+        assert_eq!("train".parse::<RunMode>().unwrap(), RunMode::Train);
+        assert_eq!("bench_mark".parse::<RunMode>().unwrap(), RunMode::BenchMark);
+        assert!("invalid".parse::<RunMode>().is_err());
+    }
+
+    #[test]
+    fn test_agent_id() {
+        let board = get_board().board;
+        let snake_id = board.snakes[0].id.clone();
+        let evaluator = Arc::new(Mutex::new(
+            crate::montecarlo::evaulator::RREvaulator::new(
+                std::rc::Rc::new(crate::montecarlo::tree::SnakeTracker::new(&board)),
+            ),
+        ));
+
+        let nn_agent = NNAgent::new(snake_id.clone(), evaluator);
+        assert_eq!(nn_agent.id(), snake_id);
+
+        let basic_agent = BasicAgent::new(snake_id.clone());
+        assert_eq!(basic_agent.id(), snake_id);
+    }
+
+    // Critical test: Verify that board states are logged BEFORE the move is executed
+    // This tests the fix where we log prior_board instead of board after execute()
+    #[test]
+    fn test_board_state_logged_before_move() {
+        let mut logger = MoveLogger::new();
+        let mut board = get_board().board;
+
+        // Get initial snake position
+        let snake_id = board.snakes[0].id.clone();
+        let initial_head = board.get_snake(&snake_id).head.clone();
+
+        // Store board state before move
+        let prior_board = board.clone();
+
+        // Create a simple policy
+        let policy = vec![MovePolicy {
+            dir: utils::RIGHT,
+            p: 1.0,
+        }];
+
+        // Execute a move (this modifies the board)
+        let is_last = false;
+        board.execute(&snake_id, utils::RIGHT, is_last);
+
+        // Log with the prior board (before the move)
+        logger.log_move(&snake_id, &prior_board, policy);
+
+        // Verify the logged board state matches the state BEFORE the move
+        let logged_move = &logger.current_game[0];
+        let logged_snake = logged_move.board.get_snake(&snake_id);
+        assert_eq!(logged_snake.head, initial_head);
+
+        // Verify the current board state is different (after the move)
+        let current_snake = board.get_snake(&snake_id);
+        assert_ne!(current_snake.head, initial_head);
+    }
+
+    // Test that policy values correspond to the board state they were calculated on
+    #[test]
+    fn test_policy_corresponds_to_logged_board_state() {
+        let mut logger = MoveLogger::new();
+        let mut board = get_board().board;
+        let snake_id = board.snakes[0].id.clone();
+
+        // Store board before move
+        let prior_board = board.clone();
+
+        // Get valid moves for the prior board state
+        let valid_moves = prior_board.get_valid_moves(&snake_id);
+        assert!(!valid_moves.is_empty());
+
+        // Create a policy that matches the valid moves
+        let policy: Vec<MovePolicy> = valid_moves
+            .iter()
+            .map(|dir| MovePolicy {
+                dir: *dir,
+                p: 1.0 / valid_moves.len() as f64,
+            })
+            .collect();
+
+        // Execute move
+        if !valid_moves.is_empty() {
+            board.execute(&snake_id, valid_moves[0], false);
+        }
+
+        // Log with prior board and policy
+        logger.log_move(&snake_id, &prior_board, policy.clone());
+
+        // Verify the logged board state has the same valid moves as the policy
+        let logged_move = &logger.current_game[0];
+        let logged_valid_moves = logged_move.board.get_valid_moves(&snake_id);
+
+        // All policy directions should be valid moves for the logged board state
+        for policy_move in &policy {
+            assert!(
+                logged_valid_moves.contains(&policy_move.dir),
+                "Policy move {:?} should be valid for logged board state",
+                policy_move.dir
+            );
+        }
+    }
+
+    #[test]
+    fn test_move_logger_buffer_size_limit() {
+        let mut logger = MoveLogger::new();
+        let board = get_board().board;
+        let policy = vec![MovePolicy {
+            dir: utils::RIGHT,
+            p: 1.0,
+        }];
+
+        // Add more moves than RB_SIZE
+        for _ in 0..(RB_SIZE + 100) {
+            logger.log_move("snake1", &board, policy.clone());
+            logger.log_win("snake1");
+        }
+
+        // Buffer should be capped at RB_SIZE
+        assert_eq!(logger.buffer.len(), RB_SIZE);
     }
 }

@@ -467,11 +467,15 @@ impl NNEvaulator {
 }
 
 impl Evaluator for NNEvaulator {
-    fn predict_winner(&self, board: &Board, _: &str) -> String {
-        let input = NNEvaulator::generate_input_tensor_batch(&vec![board])
+    fn predict_winner(&self, board: &Board, snake_id: &str) -> String {
+        let mut board = board.clone();
+        let starting_snake = board.get_snake(snake_id).clone();
+        utils::fix_snake_order(&mut board, starting_snake);
+
+        let input = NNEvaulator::generate_input_tensor_batch(&vec![&board])
             .to_device(&self.model.common.device)
             .unwrap();
-        let scalars = NNEvaulator::generate_input_scalar_batch(&vec![board])
+        let scalars = NNEvaulator::generate_input_scalar_batch(&vec![&board])
             .to_device(&self.model.common.device)
             .unwrap();
 
@@ -493,12 +497,15 @@ impl Evaluator for NNEvaulator {
     fn predict_best_moves(
         &self,
         board: &Board,
-        _: &str,
+        snake_id: &str,
     ) -> Vec<super::evaulator::MovePolicy> {
-        let input = NNEvaulator::generate_input_tensor_batch(&vec![board])
+        let mut board = board.clone();
+        let starting_snake = board.get_snake(snake_id).clone();
+        utils::fix_snake_order(&mut board, starting_snake);
+        let input = NNEvaulator::generate_input_tensor_batch(&vec![&board])
             .to_device(&self.model.common.device)
             .unwrap();
-        let scalars = NNEvaulator::generate_input_scalar_batch(&vec![board])
+        let scalars = NNEvaulator::generate_input_scalar_batch(&vec![&board])
             .to_device(&self.model.common.device)
             .unwrap();
         let output = self
