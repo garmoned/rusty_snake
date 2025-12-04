@@ -42,12 +42,28 @@ impl Board {
 
     // Add food randomly.
     pub fn add_food(&mut self) {
-        let x: u32 = rand::random();
-        let y: u32 = rand::random();
-        self.food.push(Coord {
-            x: (x % (self.width)) as i32,
-            y: (y % (self.height)) as i32,
-        });
+        // Find all empty spaces on the board.
+        let mut empty_spaces = vec![];
+        for x in 0..self.width {
+            for y in 0..self.height {
+                if !self.intersect_any_snake_body(
+                    &Coord {
+                        x: x as i32,
+                        y: y as i32,
+                    },
+                    &"".to_string(),
+                    0,
+                ) {
+                    empty_spaces.push(Coord { x: x as i32, y: y as i32 });
+                }
+            }
+        }
+        // Choose a random empty space and add food to it.
+        if empty_spaces.is_empty() {
+            return;
+        }
+        let random_space = empty_spaces.choose(&mut rand::thread_rng()).unwrap();
+        self.food.push(random_space.clone());
     }
 
     pub fn get_valid_moves(&self, snake_id: &str) -> Vec<(i32, i32)> {
