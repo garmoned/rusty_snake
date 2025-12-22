@@ -159,7 +159,7 @@ impl CommonModel {
 
             let mut loss: Option<Tensor> = None;
 
-            for unit in units.as_slice() {                
+            for unit in units.as_slice() {
                 let batch_scalar =
                     NNEvaulator::generate_input_scalar_batch(&boards)
                         .to_device(&self.device)?;
@@ -234,12 +234,14 @@ impl ValueUnit {
     }
 }
 
-
 /// Computes Cross-Entropy loss for soft targets (probability distributions).
-/// 
+///
 /// * `logits`: The raw output from the neural network (BEFORE Softmax). Shape: [Batch, Actions]
 /// * `targets`: The MCTS probabilities (sum to 1.0). Shape: [Batch, Actions]
-pub fn soft_cross_entropy(logits: &Tensor, targets: &Tensor) -> Result<Tensor, candle_core::error::Error> {
+pub fn soft_cross_entropy(
+    logits: &Tensor,
+    targets: &Tensor,
+) -> Result<Tensor, candle_core::error::Error> {
     // 1. Convert raw logits to Log-Probabilities
     // This is more numerically stable than doing softmax -> log
     let log_probs = candle_nn::ops::log_softmax(logits, 1)?;
@@ -515,6 +517,34 @@ impl Evaluator for NNEvaulator {
         }
     }
 
+    fn predict_value(
+        &self,
+        board: &Board,
+        target_snake: &str,
+        current_snake: &str,
+    ) -> f32 {
+        // Currently there is no way to tell the neural network to predict the
+        // winner of anyone else besides the current snake.
+        //
+        // So we set the current snake to the target snake.
+
+        let snake = board.get_snake(target_snake);
+        let mut copy_board = board.clone();
+        utils::fix_snake_order(&mut copy_board, snake.clone());
+
+        let input = NNEvaulator::generate_input_tensor_batch(&vec![&board])
+            .to_device(&self.model.common.device)
+            .unwrap();
+        let scalars = NNEvaulator::generate_input_scalar_batch(&vec![&board])
+            .to_device(&self.model.common.device)
+            .unwrap();
+
+        // Output is in the format batch X value.
+        let output = self.model.value_forward(&input, scalars).unwrap();
+        let output = output.squeeze(0).unwrap();
+        output.to_vec1::<f32>().unwrap()[0]
+    }
+
     fn predict_best_moves(
         &self,
         board: &Board,
@@ -526,10 +556,7 @@ impl Evaluator for NNEvaulator {
         let scalars = NNEvaulator::generate_input_scalar_batch(&vec![&board])
             .to_device(&self.model.common.device)
             .unwrap();
-        let output = self
-            .model
-            .policy_forward(&input, scalars)
-            .unwrap();
+        let output = self.model.policy_forward(&input, scalars).unwrap();
         // Apply softmax to the output to generate a probability distribution.
         let output = candle_nn::ops::softmax(&output, 1).unwrap();
         let output = output.squeeze(0).unwrap();
@@ -750,7 +777,11 @@ mod test {
 
         for m in &tree_best_moves.1 {
             // Print out the move and policy value
-            println!("tree move {} - policy value {}", dir_to_string(m.dir), m.p);
+            println!(
+                "tree move {} - policy value {}",
+                dir_to_string(m.dir),
+                m.p
+            );
         }
 
         let move_log = MoveLog {

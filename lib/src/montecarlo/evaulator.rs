@@ -18,6 +18,15 @@ pub trait Evaluator {
     // predicts the most likely winner of the game.
     fn predict_winner(&self, board: &Board, current_snake: &str) -> String;
 
+    // Predicts the value of the board for the given snake as if the snake is
+    // next to move.
+    fn predict_value(
+        &self,
+        board: &Board,
+        target_snake: &str,
+        current_snake: &str,
+    ) -> f32;
+
     // Predicts the best moves to be played by the player about to move.
     fn predict_best_moves(
         &self,
@@ -56,6 +65,20 @@ impl Evaluator for RREvaulator {
             crate::board::EndState::Playing => {
                 panic!("somehow the end state ended with playing")
             }
+        }
+    }
+
+    fn predict_value(
+        &self,
+        board: &Board,
+        target_snake: &str,
+        current_snake: &str,
+    ) -> f32 {
+        let winner = self.predict_winner(board, current_snake);
+        if winner == target_snake {
+            return 1.0;
+        } else {
+            return -1.0;
         }
     }
 

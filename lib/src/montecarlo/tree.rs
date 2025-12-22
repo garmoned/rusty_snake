@@ -230,24 +230,32 @@ mod test {
     #[test]
     fn test_avoid_death_get_food() {
         let game_state = get_scenario(AVOID_DEATH_GET_FOOD);
+        let copy_board = game_state.board.clone();
         let mut tree = Tree::new(
             MonteCarloConfig::default(),
             game_state.board,
             game_state.you,
         );
+
+        println!("{}", copy_board.to_string());
+
         let best_move = dir_to_string(tree.get_best_move());
-        assert_ne!(best_move, "right")
+        assert_eq!(best_move, "up")
     }
 
     #[test]
     fn test_avoid_death_advanced() {
         let game_state = get_scenario(AVOID_DEATH_ADVANCED);
+        let copy_board = game_state.board.clone();
         let mut tree = Tree::new(
             MonteCarloConfig::default(),
             game_state.board,
             game_state.you,
         );
         let best_move = dir_to_string(tree.get_best_move());
+
+        println!("{}", copy_board.to_string());
+
         assert_ne!(best_move, "right")
     }
     #[test]

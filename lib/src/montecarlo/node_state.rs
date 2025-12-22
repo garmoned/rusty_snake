@@ -15,11 +15,11 @@ pub(crate) struct NodeState {
 
     // The snake who is about to make a move.
     pub(crate) current_snake: String,
+
     // The direction just moved in.
     pub(crate) taken_dir: Dir,
 
     pub(crate) sims: i32,
-    wins: i32,
 
     // Shared ownership by the nodes.
     // Too lazy to do ownership stuff for just a helper object.
@@ -31,6 +31,10 @@ pub(crate) struct NodeState {
 
     // Whether this node state is always terminal.
     is_solved: bool,
+
+    // The total accumulated value for the snake that took a move
+    // to reach this board state.
+    accumulated_v: f64,
 }
 
 impl NodeState {
@@ -46,7 +50,6 @@ impl NodeState {
             taken_dir: (1, 0),
             current_snake,
             sims: 0,
-            wins: 0,
             parent: None,
             children: vec![],
             board_state,
@@ -54,6 +57,7 @@ impl NodeState {
             evaulator: evaulator,
             policy_pred: 1.0,
             is_solved: false,
+            accumulated_v: 0.0,
         }
     }
 
@@ -68,7 +72,6 @@ impl NodeState {
         NodeState {
             current_snake,
             sims: 0,
-            wins: 0,
             taken_dir,
             parent: None,
             children: vec![],
@@ -77,6 +80,7 @@ impl NodeState {
             evaulator: evaulator,
             policy_pred,
             is_solved: false,
+            accumulated_v: 0.0,
         }
     }
 
@@ -98,9 +102,15 @@ impl NodeState {
         lock.predict_best_moves(&self.board_state, &self.current_snake)
     }
 
-    fn predict_winner(&self) -> String {
+    fn predict_value(&self) -> f32 {
         let lock = self.evaulator.lock().unwrap();
-        lock.predict_winner(&self.board_state, &self.current_snake)
+        let rewarded_snake =
+            self.snake_tracker.get_prev_snake(&self.current_snake);
+        lock.predict_value(
+            &self.board_state,
+            rewarded_snake,
+            &self.current_snake,
+        )
     }
 
     pub fn expand(&mut self) {
@@ -136,33 +146,44 @@ impl NodeState {
 
     pub fn play_out(&mut self) {
         // Only use the evaluator if the game has not already finished.
+        let rewarded_snake = self
+            .snake_tracker
+            .get_prev_snake(&self.current_snake)
+            .to_string();
         if self.board_state.is_terminal() {
             self.is_solved = true;
             match self.board_state.get_endstate() {
                 crate::board::EndState::Winner(winner) => {
-                    self.back_prop(&winner)
+                    if winner == rewarded_snake {
+                        self.back_prop(&rewarded_snake, 1.0)
+                    } else {
+                        self.back_prop(&rewarded_snake, -1.0);
+                    }
                 }
                 crate::board::EndState::Playing => {
                     panic!("Board state should be terminal")
                 }
-                crate::board::EndState::Tie => self.back_prop("tie"),
+                crate::board::EndState::Tie => self.back_prop("tie", 0.0),
             }
         } else {
-            let winner = self.predict_winner();
-            self.back_prop(&winner);
+            self.back_prop(&rewarded_snake, self.predict_value() as f64);
         }
     }
 
-    pub fn back_prop(&mut self, winner: &str) {
+    pub fn back_prop(&mut self, rewarded_snake: &str, value: f64) {
         // The win should be awarded to the player who performed the move that led to this board state.
         // Not the player whose turn it is to move since they haven't actually impacted the game state yet.
-        if self.snake_tracker.get_prev_snake(&self.current_snake) == winner {
-            self.wins += 1;
+        let self_rewarded_snake =
+            self.snake_tracker.get_prev_snake(&self.current_snake);
+        if self_rewarded_snake == rewarded_snake {
+            self.accumulated_v += value
+        } else if self_rewarded_snake != "tie" {
+            self.accumulated_v -= value;
         }
         self.sims += 1;
         match self.parent {
             Some(parent) => unsafe {
-                parent.as_mut().unwrap().back_prop(winner)
+                parent.as_mut().unwrap().back_prop(rewarded_snake, value)
             },
             None => { /* Do nothing */ }
         }
@@ -185,10 +206,6 @@ impl NodeState {
 
     pub fn sims(&self) -> f64 {
         return self.sims as f64;
-    }
-
-    pub fn wins(&self) -> f64 {
-        return self.wins as f64;
     }
 
     pub fn utc_val(&self, parent_sims: f64) -> f64 {
@@ -218,7 +235,7 @@ impl NodeState {
         let discover = ((parent_sims).ln() / (1.0 + self.sims())).sqrt()
             * NodeState::C
             * self.policy_pred;
-        let reward = self.wins() / self.sims();
+        let reward = (self.accumulated_v as f64) / self.sims();
         return reward + discover;
     }
 }

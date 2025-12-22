@@ -81,13 +81,13 @@ impl Board {
             coord.x = head.x + dir.1;
             coord.y = head.y + dir.0;
 
-            if !coord.in_bounds(self.width(), self.height()) {
-                continue;
-            }
-            if self.intersect_any_snake_body(&coord, snake_id, snake.body.len())
-            {
-                continue;
-            }
+            // if !coord.in_bounds(self.width(), self.height()) {
+            //     continue;
+            // }
+            // if self.intersect_any_snake_body(&coord, snake_id, snake.body.len())
+            // {
+            //     continue;
+            // }
             dirs.push(dir)
         }
         return dirs;
