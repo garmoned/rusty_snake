@@ -48,14 +48,14 @@ impl SnakeTracker {
 
     pub fn get_next_snake(&self, current_snake: &str) -> &str {
         let next_index = self.snake_map[current_snake] + 1;
-        return &self.snake_vec[next_index % self.snake_vec.len()];
+        &self.snake_vec[next_index % self.snake_vec.len()]
     }
 
     pub fn get_prev_snake(&self, current_snake: &str) -> &str {
         let current_index = self.snake_map[current_snake];
         let prev_index =
             (current_index + self.snake_vec.len() - 1) % self.snake_vec.len();
-        return &self.snake_vec[prev_index];
+        &self.snake_vec[prev_index]
     }
 }
 
@@ -69,7 +69,7 @@ impl Tree {
         let starting_snake_id = starting_snake.id.clone();
         utils::fix_snake_order(&mut starting_board, starting_snake);
         let snake_tracker = Rc::from(SnakeTracker::new(&starting_board));
-        return Self {
+        Self {
             max_duration: config.max_duration,
             root: NodeState::new(
                 starting_board,
@@ -77,7 +77,7 @@ impl Tree {
                 snake_tracker,
                 evaluator,
             ),
-        };
+        }
     }
 
     pub fn new(
@@ -104,7 +104,7 @@ impl Tree {
                 Arc::from(Mutex::from(nn)) as Arc<Mutex<dyn Evaluator>>
             }
         };
-        return Self {
+        Self {
             max_duration: config.max_duration,
             root: NodeState::new(
                 starting_board,
@@ -112,13 +112,13 @@ impl Tree {
                 snake_tracker,
                 evaluator,
             ),
-        };
+        }
     }
 
     fn expand_tree(&mut self) {
         let promising_node = self.root.select_node();
         promising_node.expand();
-        if promising_node.children.len() > 0 {
+        if !promising_node.children.is_empty() {
             promising_node
                 .children
                 .choose_mut(&mut rand::thread_rng())
@@ -134,17 +134,17 @@ impl Tree {
         for child in &self.root.children {
             dirs.push((child.taken_dir, child.sims))
         }
-        return dirs;
+        dirs
     }
 
     pub fn get_best_move(&mut self) -> (i32, i32) {
-        return self.get_best_move_with_start_time(Instant::now());
+        self.get_best_move_with_start_time(Instant::now())
     }
 
     pub fn get_best_move_with_policy(
         &mut self,
     ) -> ((i32, i32), Vec<MovePolicy>) {
-        return self.move_with_policy_at_time(Instant::now());
+        self.move_with_policy_at_time(Instant::now())
     }
 
     pub fn move_policy(&mut self, start: Instant) -> Vec<MovePolicy> {
@@ -166,7 +166,7 @@ impl Tree {
                 p: (node.sims() / t_sims),
             });
         }
-        return policy;
+        policy
     }
 
     pub fn move_with_policy_at_time(
@@ -183,7 +183,7 @@ impl Tree {
             return ((1, 0), policy);
         }
         let best_child = best_move.unwrap();
-        return (best_child.dir, policy);
+        (best_child.dir, policy)
     }
 
     pub fn get_best_move_with_start_time(
@@ -199,7 +199,7 @@ impl Tree {
             return (1, 0);
         }
         let best_child = best_child.unwrap();
-        return best_child.dir;
+        best_child.dir
     }
 }
 

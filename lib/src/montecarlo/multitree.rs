@@ -44,7 +44,7 @@ impl Multitree {
                     self.starting_board.clone(),
                     self.starting_snake.clone(),
                 );
-                tree.get_best_move_with_start_time(start_time.clone());
+                tree.get_best_move_with_start_time(start_time);
                 s.send(tree.get_root_scores()).unwrap()
             });
         for root_results in reciever.into_iter() {

@@ -25,10 +25,10 @@ impl NodeState {
         let board = &self.board_state;
         let end_state: EndState = board.get_endstate();
         let mut scores = vec![];
-        for (_, snake) in board.snakes.iter().enumerate() {
+        for snake in board.snakes.iter() {
             scores.push(
                 self.calculate_raw_score_per_snake(
-                    &snake.id, &end_state, &board,
+                    &snake.id, &end_state, board,
                 ),
             )
         }
@@ -36,10 +36,10 @@ impl NodeState {
         if total_score == 0.0 {
             total_score = NodeState::MAX_SCORE
         }
-        return scores
+        scores
             .iter()
             .map(|x| (x / total_score) * NodeState::MAX_SCORE)
-            .collect();
+            .collect()
     }
 
     fn calculate_raw_score_per_snake(
@@ -65,7 +65,7 @@ impl NodeState {
         let mut final_score = (health_score as f32) * NodeState::LIFE_V;
         final_score += (length_score as f32) * NodeState::LENGTH_V;
         final_score += (fill_score as f32) * NodeState::FILL_V;
-        return final_score;
+        final_score
     }
 }
 
@@ -81,12 +81,12 @@ impl Tree {
     pub const PARALLEL_DEPTH: usize = 6;
     pub fn get_next_snake(&self, current_snake: &str) -> &str {
         let next_index = self.snake_map[current_snake] + 1;
-        return &self.snake_vec[next_index % self.snake_vec.len()];
+        &self.snake_vec[next_index % self.snake_vec.len()]
     }
 
     pub fn is_last_nake(&self, current_snake: &str) -> bool {
         let cur_index = self.snake_map[current_snake];
-        return cur_index + 1 == self.snake_vec.len();
+        cur_index + 1 == self.snake_vec.len()
     }
 
     pub fn new(
@@ -106,13 +106,13 @@ impl Tree {
         let root_node_state = NodeState {
             board_state: starting_board,
         };
-        return Self {
+        Self {
             snake_map,
             snake_vec,
             root: root_node_state,
             target_snake_id: starting_snake_id,
             max_depth: config.depth,
-        };
+        }
     }
 
     pub fn get_best_move(&self) -> (i32, i32) {
@@ -134,7 +134,7 @@ impl Tree {
             score
         );
 
-        return best_move;
+        best_move
     }
 
     fn get_score_parallel(
@@ -173,7 +173,7 @@ impl Tree {
             for dir in board_state.get_valid_moves(&current_snake) {
                 // Perform alpha pruning.
                 // If we found a move better than what is above us we can stop looking.
-                if max_score.len() > 0
+                if !max_score.is_empty()
                     && max_score[self.snake_map[&current_snake]]
                         > alphas[self.snake_map[&current_snake]]
                 {
@@ -205,12 +205,12 @@ impl Tree {
                         );
                     }
 
-                    return self.get_score(
+                    self.get_score(
                         depth + 1,
                         new_node,
                         passed_alphas,
                         next_snake,
-                    );
+                    )
                 });
 
                 handles.push((dir, handle));
@@ -227,7 +227,7 @@ impl Tree {
                 let dir = handle.0;
                 match handle.1.join() {
                     Ok((new_score, _)) => {
-                        if max_score.len() == 0
+                        if max_score.is_empty()
                             || new_score[self.snake_map[&current_snake]]
                                 > max_score[self.snake_map[&current_snake]]
                         {
@@ -250,7 +250,7 @@ impl Tree {
             }
         });
 
-        return (max_score, best_dir);
+        (max_score, best_dir)
     }
 
     fn get_score(
@@ -288,7 +288,7 @@ impl Tree {
         for dir in board_state.get_valid_moves(&current_snake) {
             // Perform alpha pruning.
             // If we found a move better than what is above us we can stop looking.
-            if max_score.len() > 0
+            if !max_score.is_empty()
                 && max_score[self.snake_map[&current_snake]]
                     > alphas[self.snake_map[&current_snake]]
             {
@@ -313,7 +313,7 @@ impl Tree {
                 self.get_next_snake(&current_snake).to_owned(),
             );
 
-            if max_score.len() == 0
+            if max_score.is_empty()
                 || new_score[self.snake_map[&current_snake]]
                     > max_score[self.snake_map[&current_snake]]
             {
@@ -330,7 +330,7 @@ impl Tree {
                 }
             }
         }
-        return (max_score, best_dir);
+        (max_score, best_dir)
     }
 }
 

@@ -26,9 +26,9 @@ pub enum EndState {
 impl EndState {
     pub fn is_terminal(&self) -> bool {
         match &self {
-            EndState::Winner(_) => return true,
-            EndState::Playing => return false,
-            EndState::Tie => return true,
+            EndState::Winner(_) => true,
+            EndState::Playing => false,
+            EndState::Tie => true,
         }
     }
 }
@@ -37,7 +37,7 @@ impl Board {
     pub fn execute_random_move(&mut self, snake_id: &str) {
         let valid_moves = self.get_valid_moves(snake_id);
         let dir = valid_moves.choose(&mut rand::thread_rng()).unwrap();
-        self.execute_dir(snake_id, dir.clone());
+        self.execute_dir(snake_id, *dir);
     }
 
     // Add food randomly.
@@ -51,7 +51,7 @@ impl Board {
                         x: x as i32,
                         y: y as i32,
                     },
-                    &"".to_string(),
+                    "",
                     0,
                 ) {
                     empty_spaces.push(Coord { x: x as i32, y: y as i32 });
@@ -90,7 +90,7 @@ impl Board {
             // }
             dirs.push(dir)
         }
-        return dirs;
+        dirs
     }
 
     pub fn intersect_any_snake_body(
@@ -118,11 +118,11 @@ impl Board {
                 }
             }
         }
-        return false;
+        false
     }
 
     pub fn to_string(&self) -> String {
-        return self.to_string_with_depth(0);
+        self.to_string_with_depth(0)
     }
 
     pub fn width(&self) -> i32 {
@@ -153,7 +153,7 @@ impl Board {
             for bod in &snake.body {
                 let mut icon = "#";
                 if bod.intersect(&snake.head) {
-                    icon = &snake.id.get(0..1).unwrap();
+                    icon = snake.id.get(0..1).unwrap();
                 }
                 if bod.in_bounds(
                     self.width.try_into().unwrap(),
@@ -178,7 +178,7 @@ impl Board {
             string += &str_row;
             string += "\n";
         }
-        return string;
+        string
     }
 }
 
@@ -190,15 +190,15 @@ impl Board {
         action: Action,
         last_snake: bool,
     ) -> EndState {
-        return self.execute(&action.snake_id, action.dir, last_snake);
+        self.execute(&action.snake_id, action.dir, last_snake)
     }
 
     pub fn execute_dir(&mut self, snake_id: &str, dir: (i32, i32)) -> EndState {
-        return self.execute(snake_id, dir, self.is_last_snake(&snake_id));
+        self.execute(snake_id, dir, self.is_last_snake(snake_id))
     }
 
     pub fn is_last_snake(&self, snake_id: &str) -> bool {
-        return self.snakes.get(self.snakes.len() - 1).unwrap().id == snake_id;
+        self.snakes.last().unwrap().id == snake_id
     }
 
     pub fn execute(
@@ -228,7 +228,7 @@ impl Board {
         self.eliminate_snakes();
         self.eliminate_via_collisions();
 
-        return self.get_endstate();
+        self.get_endstate()
     }
 
     fn feed_snakes(&mut self) {
@@ -259,7 +259,7 @@ impl Board {
             if snake.is_eliminated() {
                 continue;
             }
-            if snake.body.len() == 0 {
+            if snake.body.is_empty() {
                 panic!("Zero length snake")
             }
 
@@ -317,8 +317,8 @@ impl Board {
             if snake_id == snake.id {
                 let last_index = snake.body.len() - 1;
                 let mut new_head = Coord::default();
-                new_head.x = snake.body.get(0).unwrap().x + dir.1;
-                new_head.y = snake.body.get(0).unwrap().y + dir.0;
+                new_head.x = snake.body.first().unwrap().x + dir.1;
+                new_head.y = snake.body.first().unwrap().y + dir.0;
                 snake.body.rotate_left(last_index);
                 snake.body.get_mut(0).unwrap().x = new_head.x;
                 snake.body.get_mut(0).unwrap().y = new_head.y;
@@ -329,9 +329,9 @@ impl Board {
 
     pub fn is_terminal(&self) -> bool {
         match self.get_endstate() {
-            EndState::Winner(_) => return true,
-            EndState::Playing => return false,
-            EndState::Tie => return true,
+            EndState::Winner(_) => true,
+            EndState::Playing => false,
+            EndState::Tie => true,
         }
     }
 
@@ -339,7 +339,7 @@ impl Board {
         let mut snakes_remaining = 0;
         let mut alive_snake_id = "".to_string();
         for snake in &self.snakes {
-            if self.get_valid_moves(&snake.id).len() > 0 {
+            if !self.get_valid_moves(&snake.id).is_empty() {
                 snakes_remaining += 1;
                 alive_snake_id = snake.id.clone();
                 continue;
@@ -354,7 +354,7 @@ impl Board {
             return EndState::Tie;
         }
 
-        return EndState::Playing;
+        EndState::Playing
     }
 
     pub fn get_snake(&self, snake_id: &str) -> &Battlesnake {
@@ -384,9 +384,8 @@ impl Battlesnake {
     }
 
     fn self_collision(&self) -> bool {
-        let head_collide =
-            Battlesnake::head_collide_body(&self.head, &self.body);
-        return head_collide;
+        
+        Battlesnake::head_collide_body(&self.head, &self.body)
     }
 
     fn self_eliminate(&mut self) {
@@ -406,7 +405,7 @@ impl Battlesnake {
                 return true;
             }
         }
-        return false;
+        false
     }
 
     fn body_collision(&self, other_snake: &Battlesnake) -> bool {
@@ -414,8 +413,8 @@ impl Battlesnake {
     }
 
     fn dies_head_to_head(&self, other_snake: &Battlesnake) -> bool {
-        return self.head.intersect(&other_snake.head)
-            && other_snake.body.len() > self.body.len();
+        self.head.intersect(&other_snake.head)
+            && other_snake.body.len() > self.body.len()
     }
 
     fn head_collide_body(head: &Coord, body: &Vec<Coord>) -> bool {
@@ -427,20 +426,20 @@ impl Battlesnake {
                 return true;
             }
         }
-        return false;
+        false
     }
 
     fn snake_is_out_of_bounds(&self, height: i32, width: i32) -> bool {
-        let head = self.body.get(0).unwrap();
-        return head.x >= width || head.x < 0 || head.y >= height || head.y < 0;
+        let head = self.body.first().unwrap();
+        head.x >= width || head.x < 0 || head.y >= height || head.y < 0
     }
 
     fn out_of_health(&self) -> bool {
-        return self.health == 0;
+        self.health == 0
     }
 
     fn is_eliminated(&self) -> bool {
-        return self.eliminated_cause.is_some();
+        self.eliminated_cause.is_some()
     }
 }
 

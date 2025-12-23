@@ -55,15 +55,15 @@ impl Coord {
     }
 
     pub fn default() -> Self {
-        return Self { x: 0, y: 0 };
+        Self { x: 0, y: 0 }
     }
 
     pub fn intersect(&self, coord: &Coord) -> bool {
-        return self.x == coord.x && self.y == coord.y;
+        self.x == coord.x && self.y == coord.y
     }
 
     pub fn in_bounds(&self, width: i32, height: i32) -> bool {
-        return self.x < width && self.y < height && self.y >= 0 && self.x >= 0;
+        self.x < width && self.y < height && self.y >= 0 && self.x >= 0
     }
 }
 

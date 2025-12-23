@@ -122,7 +122,7 @@ impl MoveLogger {
     // Used to merge two move loggers together after.
     // Used to merge batches together after running lots of simulations
     pub fn merge(&mut self, other: MoveLogger) {
-        if self.current_game.len() > 0 {
+        if !self.current_game.is_empty() {
             panic!("Should not be merging with a game in progress");
         }
         self.games_played += other.games_played;
@@ -143,7 +143,7 @@ impl MoveLogger {
             player: player.to_string(),
             board: board.clone(),
             winner: None,
-            policy: policy,
+            policy,
         });
     }
 
@@ -197,7 +197,7 @@ impl NNAgent {
         let config = MonteCarloConfig::default();
         Self {
             starting_snake_id: snake.clone(),
-            config: config,
+            config,
             evaulator,
         }
     }
@@ -381,18 +381,18 @@ impl Trainer {
         Ok(Self {
             agents: agent,
             move_logger: MoveLogger::new(),
-            config: config,
+            config,
             init_board: board.clone(),
             // We should clean up these unwraps.
             model: training_model,
-            optimiser: optimiser,
+            optimiser,
             evaluator: evaulator,
         })
     }
 
     fn train(&mut self) -> Result<(), candle_core::error::Error> {
-        let mut buffer_view = self.move_logger.get_move_view();
-        self.model.train(&mut buffer_view, &mut self.optimiser)?;
+        let buffer_view = self.move_logger.get_move_view();
+        self.model.train(buffer_view, &mut self.optimiser)?;
         println!("Training run finished");
         self.model.save_weights("./data/models/basic.safetensor")?;
 
@@ -423,7 +423,7 @@ impl Trainer {
                 }
 
                 // Every 20 moves or so throw a food in.
-                if random::<u32>() % 20 == 0 {
+                if random::<u32>().is_multiple_of(20) {
                     board.add_food();
                 }
             }

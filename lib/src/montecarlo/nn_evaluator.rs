@@ -115,7 +115,7 @@ impl CommonModel {
     }
 
     fn get_optimizer(&self) -> Result<AdamW, candle_core::error::Error> {
-        return AdamW::new_lr(self.var_map.all_vars(), 0.0001);
+        AdamW::new_lr(self.var_map.all_vars(), 0.0001)
     }
 
     fn common_forward(
@@ -124,7 +124,7 @@ impl CommonModel {
         // In the form Batch X Scalars.
         scalars: Tensor,
     ) -> Result<Tensor, candle_core::error::Error> {
-        let x = self.cv1.forward(&x)?;
+        let x = self.cv1.forward(x)?;
         let x = x.relu()?;
         let x = self.cv2.forward(&x)?;
         // Flatten everything but the batch dimension.
@@ -165,8 +165,8 @@ impl CommonModel {
                         .to_device(&self.device)?;
 
                 let inference =
-                    unit.forward(&batch_tensor, batch_scalar, &self)?;
-                let targets = unit.label_batch(&batch);
+                    unit.forward(&batch_tensor, batch_scalar, self)?;
+                let targets = unit.label_batch(batch);
                 let local_loss = unit.loss_fn(&inference, &targets)?;
                 match loss {
                     Some(g_loss) => loss = Some(g_loss.add(&local_loss)?),
@@ -337,9 +337,9 @@ impl MultiOutputModel {
         let policy_unit = PolicyUnit::new(common.device.clone());
         let value_unit = ValueUnit::new(common.device.clone());
         Ok(Self {
-            common: common,
-            policy_unit: policy_unit,
-            value_unit: value_unit,
+            common,
+            policy_unit,
+            value_unit,
         })
     }
     pub fn load_weights(
@@ -396,9 +396,9 @@ pub struct NNEvaulator {
 
 impl NNEvaulator {
     pub fn new() -> Result<Self, error::Error> {
-        return Ok(Self {
+        Ok(Self {
             model: MultiOutputModel::new()?,
-        });
+        })
     }
 
     pub fn load_weights(
@@ -418,8 +418,8 @@ impl NNEvaulator {
             let idx = coord.y_shifted(1) * (BOARD_SIZE) + coord.x_shifted(1);
             grid[idx] = 1.0;
         }
-        return Tensor::from_vec(grid, (BOARD_SIZE, BOARD_SIZE), &Device::Cpu)
-            .unwrap();
+        Tensor::from_vec(grid, (BOARD_SIZE, BOARD_SIZE), &Device::Cpu)
+            .unwrap()
     }
 
     // The tensor will have a channel for :
@@ -459,7 +459,7 @@ impl NNEvaulator {
             walls.push(Coord { x: 12, y: i });
         }
         channels.push(NNEvaulator::one_hot_encode(&walls));
-        return Tensor::stack(&channels, 0).unwrap();
+        Tensor::stack(&channels, 0).unwrap()
     }
 
     // Generates a 1D tensor in the format of
@@ -473,7 +473,7 @@ impl NNEvaulator {
             // Health normalized to max health of 100.
             scalars.push((snake.health as f32) / 100.0);
         }
-        return Tensor::from_vec(scalars, 4, &Device::Cpu).unwrap();
+        Tensor::from_vec(scalars, 4, &Device::Cpu).unwrap()
     }
 
     fn generate_input_scalar_batch(boards: &Vec<&Board>) -> Tensor {
@@ -481,7 +481,7 @@ impl NNEvaulator {
         for b in boards {
             tensors.push(NNEvaulator::generate_scalar_inputs(b));
         }
-        return Tensor::stack(&tensors, 0).unwrap();
+        Tensor::stack(&tensors, 0).unwrap()
     }
 
     fn generate_input_tensor_batch(boards: &Vec<&Board>) -> Tensor {
@@ -489,7 +489,7 @@ impl NNEvaulator {
         for b in boards {
             tensors.push(NNEvaulator::generate_input_tensor(b));
         }
-        return Tensor::stack(&tensors, 0).unwrap();
+        Tensor::stack(&tensors, 0).unwrap()
     }
 }
 
@@ -511,9 +511,9 @@ impl Evaluator for NNEvaulator {
             return board.snakes[0].id.clone();
         }
         if output < -0.1 {
-            return board.snakes[1].id.clone();
+            board.snakes[1].id.clone()
         } else {
-            return "tie".to_string();
+            "tie".to_string()
         }
     }
 

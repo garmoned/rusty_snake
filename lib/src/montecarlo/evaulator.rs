@@ -55,13 +55,13 @@ impl Evaluator for RREvaulator {
         let mut end_state = board_copy.get_endstate();
         let mut current_snake = current_snake;
         while !end_state.is_terminal() {
-            board_copy.execute_random_move(&current_snake);
+            board_copy.execute_random_move(current_snake);
             end_state = board_copy.get_endstate();
             current_snake = self.snake_tracker.get_next_snake(current_snake)
         }
         match end_state {
-            crate::board::EndState::Winner(winner) => return winner,
-            crate::board::EndState::Tie => return "Tie".to_string(),
+            crate::board::EndState::Winner(winner) => winner,
+            crate::board::EndState::Tie => "Tie".to_string(),
             crate::board::EndState::Playing => {
                 panic!("somehow the end state ended with playing")
             }
@@ -76,15 +76,15 @@ impl Evaluator for RREvaulator {
     ) -> f32 {
         let winner = self.predict_winner(board, current_snake);
         if winner == target_snake {
-            return 1.0;
+            1.0
         } else {
-            return -1.0;
+            -1.0
         }
     }
 
     fn predict_best_moves(&self, _: &Board, _: &str) -> Vec<MovePolicy> {
         // return an even distribution of moves.
-        return vec![
+        vec![
             MovePolicy {
                 dir: (1, 0),
                 p: 1.0,
@@ -101,6 +101,6 @@ impl Evaluator for RREvaulator {
                 dir: (0, -1),
                 p: 1.0,
             },
-        ];
+        ]
     }
 }

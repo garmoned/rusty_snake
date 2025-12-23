@@ -16,7 +16,7 @@ pub fn floodfill(board: &Board, snake_id: &str) -> usize {
         vec![false; board.width.try_into().unwrap()];
         board.height.try_into().unwrap()
     ];
-    let mut target_snake = board.snakes.get(0).unwrap();
+    let mut target_snake = board.snakes.first().unwrap();
     for snake in &board.snakes {
         if snake.id == snake_id {
             target_snake = snake;
@@ -26,7 +26,7 @@ pub fn floodfill(board: &Board, snake_id: &str) -> usize {
         }
     }
     let mut q = VecDeque::<Coord>::new();
-    let start_head = target_snake.body.get(0).unwrap();
+    let start_head = target_snake.body.first().unwrap();
     q.push_back(start_head.clone());
     while !q.is_empty() {
         let expand_from = q.pop_front().unwrap();

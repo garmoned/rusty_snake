@@ -53,8 +53,8 @@ impl NodeState {
             parent: None,
             children: vec![],
             board_state,
-            snake_tracker: snake_tracker,
-            evaulator: evaulator,
+            snake_tracker,
+            evaulator,
             policy_pred: 1.0,
             is_solved: false,
             accumulated_v: 0.0,
@@ -76,8 +76,8 @@ impl NodeState {
             parent: None,
             children: vec![],
             board_state,
-            snake_tracker: snake_tracker,
-            evaulator: evaulator,
+            snake_tracker,
+            evaulator,
             policy_pred,
             is_solved: false,
             accumulated_v: 0.0,
@@ -94,7 +94,7 @@ impl NodeState {
                 return p.p;
             }
         }
-        return 0.0;
+        0.0
     }
 
     fn get_policy(&self) -> Vec<MovePolicy> {
@@ -194,18 +194,18 @@ impl NodeState {
             return self;
         }
         let parent_sims = self.sims();
-        return self
+        self
             .children
             .iter_mut()
             .max_by(|x, y| {
                 x.utc_val(parent_sims).total_cmp(&y.utc_val(parent_sims))
             })
             .unwrap()
-            .select_node();
+            .select_node()
     }
 
     pub fn sims(&self) -> f64 {
-        return self.sims as f64;
+        self.sims as f64
     }
 
     pub fn utc_val(&self, parent_sims: f64) -> f64 {
@@ -235,7 +235,7 @@ impl NodeState {
         let discover = ((parent_sims).ln() / (1.0 + self.sims())).sqrt()
             * NodeState::C
             * self.policy_pred;
-        let reward = (self.accumulated_v as f64) / self.sims();
-        return reward + discover;
+        let reward = self.accumulated_v / self.sims();
+        reward + discover
     }
 }

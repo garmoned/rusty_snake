@@ -14,7 +14,7 @@ pub mod scenarios {
     pub fn load_game_state(data: &str) -> GameState {
         let game_state: GameState = serde_json::from_str(data)
             .expect("Failed to parse json game state");
-        return game_state;
+        game_state
     }
 
     pub fn game_over_board() -> GameState {
