@@ -521,7 +521,7 @@ impl Evaluator for NNEvaulator {
         &self,
         board: &Board,
         target_snake: &str,
-        current_snake: &str,
+        _current_snake: &str, // unused for the neural net evaluator.
     ) -> f32 {
         // Currently there is no way to tell the neural network to predict the
         // winner of anyone else besides the current snake.
