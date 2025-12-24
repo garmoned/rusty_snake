@@ -194,8 +194,7 @@ impl NodeState {
             return self;
         }
         let parent_sims = self.sims();
-        self
-            .children
+        self.children
             .iter_mut()
             .max_by(|x, y| {
                 x.utc_val(parent_sims).total_cmp(&y.utc_val(parent_sims))

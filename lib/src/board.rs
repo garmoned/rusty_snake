@@ -54,7 +54,10 @@ impl Board {
                     "",
                     0,
                 ) {
-                    empty_spaces.push(Coord { x: x as i32, y: y as i32 });
+                    empty_spaces.push(Coord {
+                        x: x as i32,
+                        y: y as i32,
+                    });
                 }
             }
         }
@@ -62,7 +65,8 @@ impl Board {
         if empty_spaces.is_empty() {
             return;
         }
-        let random_space = empty_spaces.choose(&mut rand::thread_rng()).unwrap();
+        let random_space =
+            empty_spaces.choose(&mut rand::thread_rng()).unwrap();
         self.food.push(random_space.clone());
     }
 
@@ -80,14 +84,13 @@ impl Board {
             let mut coord = Coord::default();
             coord.x = head.x + dir.1;
             coord.y = head.y + dir.0;
-
-            // if !coord.in_bounds(self.width(), self.height()) {
-            //     continue;
-            // }
-            // if self.intersect_any_snake_body(&coord, snake_id, snake.body.len())
-            // {
-            //     continue;
-            // }
+            if !coord.in_bounds(self.width(), self.height()) {
+                continue;
+            }
+            if self.intersect_any_snake_body(&coord, snake_id, snake.body.len())
+            {
+                continue;
+            }
             dirs.push(dir)
         }
         dirs
@@ -384,7 +387,6 @@ impl Battlesnake {
     }
 
     fn self_collision(&self) -> bool {
-        
         Battlesnake::head_collide_body(&self.head, &self.body)
     }
 
