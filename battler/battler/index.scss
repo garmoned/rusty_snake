@@ -1,0 +1,99 @@
+:root {
+  --bg-color: #222;
+  --text-color: #eee;
+  --board-bg: #333;
+  --board-border: #111;
+  --cell-bg: #444;
+  --cell-bg-food: #555;
+  --cell-bg-hazard: #633;
+  --snake-you-head: #2ecc71;
+  --snake-you-body: #27ae60;
+  --snake-enemy-head: #e74c3c;
+  --snake-enemy-body: #c0392b;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+}
+
+.board-wrapper {
+  padding: 20px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.game-info {
+  margin-bottom: 20px;
+  text-align: center;
+  background: var(--board-bg);
+  padding: 15px;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+
+  h2 {
+    margin: 0 0 10px 0;
+    color: #fff;
+  }
+
+  .stats {
+    display: flex;
+    gap: 30px;
+    font-size: 1.1em;
+  }
+}
+
+.grid-container {
+  display: grid;
+  gap: 2px;
+  background-color: var(--board-bg);
+  border: 4px solid var(--board-border);
+  width: fit-content;
+  margin: 0 auto;
+  padding: 2px;
+}
+
+.cell {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  background-color: var(--cell-bg);
+  border-radius: 2px;
+  position: relative; 
+
+  &.food {
+    background-color: var(--cell-bg-food);
+  }
+
+  &.hazard {
+    background-color: var(--cell-bg-hazard);
+  }
+
+  &.snake-you-body {
+    background-color: var(--snake-you-body);
+    z-index: 5;
+  }
+
+  &.snake-you-head {
+    background-color: var(--snake-you-head);
+    z-index: 10;
+  }
+
+  &.snake-enemy-body {
+    background-color: var(--snake-enemy-body);
+    z-index: 5;
+  }
+
+  &.snake-enemy-head {
+    background-color: var(--snake-enemy-head);
+    z-index: 10;
+  }
+}

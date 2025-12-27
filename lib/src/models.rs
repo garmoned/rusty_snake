@@ -19,6 +19,17 @@ pub struct Board {
     pub winner: Option<String>,
 }
 
+impl PartialEq for Board {
+    fn eq(&self, other: &Self) -> bool {
+        self.height == other.height
+            && self.width == other.width
+            && self.food == other.food
+            && self.snakes == other.snakes
+            && self.hazards == other.hazards
+            && self.winner == other.winner
+    }
+}
+
 #[derive(Deserialize, Serialize, Debug, Clone, Hash)]
 pub struct Battlesnake {
     pub id: String,
@@ -30,6 +41,20 @@ pub struct Battlesnake {
     pub latency: String,
     pub shout: Option<String>,
     pub eliminated_cause: Option<String>,
+}
+
+impl PartialEq for Battlesnake {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+            && self.name == other.name
+            && self.health == other.health
+            && self.body == other.body
+            && self.head == other.head
+            && self.length == other.length
+            && self.latency == other.latency
+            && self.shout == other.shout
+            && self.eliminated_cause == other.eliminated_cause
+    }
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, Hash, Eq, PartialEq)]
@@ -73,4 +98,10 @@ pub struct GameState {
     pub turn: u32,
     pub board: Board,
     pub you: Battlesnake,
+}
+
+impl PartialEq for GameState {
+    fn eq(&self, other: &Self) -> bool {
+        self.turn == other.turn && self.board == other.board
+    }
 }

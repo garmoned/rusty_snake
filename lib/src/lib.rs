@@ -1,10 +1,15 @@
 pub mod board;
+#[cfg(feature = "server")]
 pub mod config;
 pub mod floodfill;
+#[cfg(feature = "server")]
 pub mod learning;
+#[cfg(feature = "server")]
 pub mod logic;
+#[cfg(feature = "server")]
 pub mod minimax;
 pub mod models;
+#[cfg(feature = "server")]
 pub mod montecarlo;
 pub mod test_utils;
 pub mod utils;

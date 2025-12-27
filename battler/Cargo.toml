@@ -1,0 +1,10 @@
+[package]
+name = "battler"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# this is the development version of Yew
+yew = { git = "https://github.com/yewstack/yew/", features = ["csr"] }
+snake_lib = { path = "../lib", default-features = false }
+web-sys = { version = "0.3.83", features = ["HtmlInputElement"] }
